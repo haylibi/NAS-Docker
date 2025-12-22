@@ -28,3 +28,9 @@ teslamate/docker-compose.yml
 filebrowser/filebrowser.db
 traefik_config/certificates/thinkpadserver.tail48aaac.ts.net.crt
 traefik_config/certificates/thinkpadserver.tail48aaac.ts.net.key
+teslamate/backups/backup.log
+traefik_config/tls.yml
+teslamate/backups/grafana.tar.gz.1
+teslamate/backups/grafana.tar.gz.2
+teslamate/backups/teslamate.bck.1
+teslamate/backups/teslamate.bck.2
