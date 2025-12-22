@@ -9,10 +9,19 @@ headerStyle: {{HOMEPAGE_VAR_HEADER_STYLE}}
 layout:
   Media:
     style: row
-    columns: 3
+    columns: 5
   Download:
     style: row
-    columns: 2
+    columns: 3
+  Home Server:
+    style: column
+    rows: 2
+  Utilities:
+    style: column
+    rows: 2
+  System:
+    style: row
+    columns: 3
 
 quicklaunch:
   searchDescriptions: true

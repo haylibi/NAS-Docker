@@ -1,3 +1,62 @@
 ---
 # For configuration options and examples, please see:
 # https://gethomepage.dev/en/configs/services
+
+- System:
+    - Cpu:
+        icon: glances.png
+        widget:
+            type: glances
+            url: http://glances:61208   # Changed 'monitoring' to 'glances'
+            metric: cpu
+            version: 4                  # Added version 4
+    - Sensor:
+        icon: glances.png
+        widget:
+            type: glances
+            url: http://glances:61208   # Changed 'monitoring' to 'glances'
+            metric: sensor:Package id 0
+            version: 4                  # Added version 4
+    - Memory:
+        icon: glances.png
+        widget:
+            type: glances
+            url: http://glances:61208   # Changed 'monitoring' to 'glances'
+            metric: memory
+            version: 4                  # Added version 4
+    - Process:
+        icon: glances.png
+        widget:
+            type: glances
+            url: http://glances:61208   # Changed 'monitoring' to 'glances'
+            metric: process
+            version: 4                  # Added version 4
+    - Network:
+        href: http://thinkpadserver:61208
+        icon: glances.png
+        widget:
+            type: glances
+            url: http://glances:61208   # Changed 'monitoring' to 'glances'
+            metric: network:eth0
+            version: 4                  # Added version 4
+
+
+
+- Home Server:
+    - FritzBox:
+        icon: fritzbox.png
+        href: http://192.37.73.1
+        widget:
+            type: fritzbox
+            url: http://192.37.73.1
+    - StirlingPDF:
+        icon: stirlingpdf.png
+        href: http://thinkpadserver:8080
+        description: StirlingPDF
+    - Immich Tools:
+        icon: immich.png
+        href: http://thinkpadserver:8001
+        description: PowerTools for Immich
+    - StoryBook:
+        href: http://thinkpadserver:609
+        description: Story Book - Build your own stories

@@ -2,7 +2,34 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/en/configs/bookmarks
 
+- Developer:
+    - Github:
+        - icon: github.png
+          href: https://github.com/
+    - Stack Overflow:
+        - icon: stackoverflow.png
+          href: https://stackoverflow.com/
+
+- Social:
+    - Reddit:
+        - icon: reddit.png
+          href: https://reddit.com/
+    - YouTube:
+        - icon: youtube.png
+          href: https://youtube.com/
+
+- Entertainment:
+    - YouTube:
+        - abbr: YT
+          href: https://youtube.com/
+
+- Tools:
+    - Speedtest:
+        - abbr: ST
+          href: https://www.speedtest.net/
+
 - Credits:
     - Docker-Compose-NAS:
         - abbr: NAS
           href: https://github.com/AdrienPoupa/docker-compose-nas
+  
