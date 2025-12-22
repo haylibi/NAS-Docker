@@ -1,0 +1,15 @@
+services:
+  jellyfin-webhooks:
+    container_name: jellyfin-webhooks
+    build: 
+      context: ./jellyfin-webhooks
+    restart: unless-stopped
+    environment:
+      - QBT_HOST=${QBITTORRENT_HOST}
+      - QBT_USER=${QBITTORRENT_USERNAME}
+      - QBT_PASS=${QBITTORRENT_PASSWORD}
+      - LOG_LEVEL=INFO
+    ports:
+      - "5000:5000"
+    depends_on:
+      - gluetun

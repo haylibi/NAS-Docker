@@ -13,8 +13,8 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
-      - --entrypoints.web-secure.address=:443
-      - --entrypoints.web.http.redirections.entryPoint.to=web-secure
+      - --entrypoints.https.address=:443
+      - --entrypoints.web.http.redirections.entryPoint.to=https
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
       - --entrypoints.web.http.redirections.entrypoint.permanent=true
       - --certificatesresolvers.myresolver.acme.dnschallenge=${DNS_CHALLENGE:-true}
@@ -23,12 +23,19 @@ services:
       - --certificatesresolvers.myresolver.acme.caserver=${LETS_ENCRYPT_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
       - --certificatesresolvers.myresolver.acme.email=${LETS_ENCRYPT_EMAIL}
       - --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+
+      # ADD THIS LINE: Define a new entrypoint for Immich
+      - "--entrypoints.immich-https.address=:2283"
     ports:
       - "80:80"
       - "443:443"
+      - "2283:2283"
     volumes:
       - ${CONFIG_ROOT:-.}/letsencrypt:/letsencrypt
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./traefik_config:/etc/traefik/dynamic:ro
     extra_hosts:
       - host.docker.internal:172.17.0.1
     healthcheck:
@@ -45,6 +52,8 @@ services:
     volumes:
       - ${CONFIG_ROOT:-.}/sonarr:/config
       - ${DATA_ROOT}:/data
+    ports:
+      - "8989:8989"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8989/sonarr/ping"]
@@ -52,9 +61,9 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.sonarr.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/sonarr`))
+      - traefik.http.routers.sonarr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/sonarr`)
       - traefik.http.routers.sonarr.tls=true
-      - traefik.http.routers.sonarr.tls.certresolver=myresolver
+      - traefik.http.routers.sonarr.entrypoints=https
       - traefik.http.services.sonarr.loadbalancer.server.port=8989
       - homepage.group=Media
       - homepage.name=Sonarr
@@ -82,9 +91,9 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.radarr.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/radarr`))
+      - traefik.http.routers.radarr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/radarr`)
       - traefik.http.routers.radarr.tls=true
-      - traefik.http.routers.radarr.tls.certresolver=myresolver
+      - traefik.http.routers.radarr.entrypoints=https
       - traefik.http.services.radarr.loadbalancer.server.port=7878
       - homepage.group=Media
       - homepage.name=Radarr
@@ -95,38 +104,6 @@ services:
       - homepage.widget.type=radarr
       - homepage.widget.url=http://radarr:7878/radarr
       - homepage.widget.key=${RADARR_API_KEY}
-  lidarr:
-    image: lscr.io/linuxserver/lidarr
-    container_name: lidarr
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT:-.}/lidarr:/config
-      - ${DATA_ROOT}:/data
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8686/lidarr/ping"]
-      interval: 1m
-      retries: 10
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.lidarr.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/lidarr`))
-      - traefik.http.routers.lidarr.tls=true
-      - traefik.http.routers.lidarr.tls.certresolver=myresolver
-      - traefik.http.services.lidarr.loadbalancer.server.port=8686
-      - homepage.group=Media
-      - homepage.name=Lidarr
-      - homepage.icon=lidarr.png
-      - homepage.href=/lidarr
-      - homepage.description=Music management
-      - homepage.weight=2
-      - homepage.widget.type=lidarr
-      - homepage.widget.url=http://lidarr:8686/lidarr
-      - homepage.widget.key=${LIDARR_API_KEY}
-    profiles:
-      - lidarr
   bazarr:
     image: lscr.io/linuxserver/bazarr
     container_name: bazarr
@@ -144,9 +121,9 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.bazarr.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/bazarr`))
+      - traefik.http.routers.bazarr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/bazarr`)
       - traefik.http.routers.bazarr.tls=true
-      - traefik.http.routers.bazarr.tls.certresolver=myresolver
+      - traefik.http.routers.bazarr.entrypoints=https
       - traefik.http.services.bazarr.loadbalancer.server.port=6767
       - homepage.group=Download
       - homepage.name=Bazarr
@@ -166,6 +143,8 @@ services:
     volumes:
       - ${CONFIG_ROOT:-.}/jellyseerr:/app/config
     restart: always
+    ports:
+      - "5055:5055"
     healthcheck:
       test:
         [
@@ -179,14 +158,14 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.jellyseerr.rule=(Host(`${JELLYSEERR_HOSTNAME}`))
+      - traefik.http.routers.jellyseerr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyseerr`)
       - traefik.http.routers.jellyseerr.tls=true
       - traefik.http.routers.jellyseerr.tls.certresolver=myresolver
       - traefik.http.services.jellyseerr.loadbalancer.server.port=5055
       - homepage.group=Media
       - homepage.name=JellySeerr
       - homepage.icon=jellyseerr.png
-      - homepage.href=https://${JELLYSEERR_HOSTNAME}
+      - homepage.href=http://${HOSTNAME}:5055
       - homepage.description=Content Recommendations and Request Management
       - homepage.weight=3
       - homepage.widget.type=jellyseerr
@@ -208,14 +187,14 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.prowlarr.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/prowlarr`))
+      - traefik.http.routers.prowlarr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/prowlarr`)
       - traefik.http.routers.prowlarr.tls=true
-      - traefik.http.routers.prowlarr.tls.certresolver=myresolver
+      - traefik.http.routers.prowlarr.entrypoints=https
       - traefik.http.services.prowlarr.loadbalancer.server.port=9696
       - homepage.group=Download
       - homepage.name=Prowlarr
       - homepage.icon=prowlarr.png
-      - homepage.href=/prowlarr
+      - homepage.href=/prowlarr/
       - homepage.description=Indexers management
       - homepage.weight=1
       - homepage.widget.type=prowlarr
@@ -250,6 +229,13 @@ services:
       - ${CONFIG_ROOT:-.}/qbittorrent:/config
       - ${DOWNLOAD_ROOT}:/data/torrents
     restart: always
+    # --- THE MAGIC PART ---
+    # This tells qBit to use Gluetun's network. 
+    # It has NO internet access unless Gluetun is connected.
+    network_mode: service:gluetun 
+    # ----------------------
+    depends_on:
+      - gluetun
     healthcheck:
       # Container may fail if the PIA's token expired, so mark as unhealthy when there is no internet connection
       # see: https://github.com/qdm12/gluetun/issues/641#issuecomment-933856220
@@ -257,24 +243,7 @@ services:
         ["CMD", "curl", "--fail", "http://127.0.0.1:8080", "https://google.com"]
       interval: 1m
       retries: 10
-    network_mode: "service:vpn"
-    depends_on:
-      vpn:
-        condition: service_healthy
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.qbittorrent.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/qbittorrent`))
-      - traefik.http.routers.qbittorrent.tls=true
-      - traefik.http.routers.qbittorrent.tls.certresolver=myresolver
-      - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
-      - traefik.http.routers.qbittorrent.middlewares=qbittorrent-strip-slash,qbittorrent-stripprefix
-      # https://github.com/qbittorrent/qBittorrent/issues/5693#issuecomment-552146296
-      - traefik.http.middlewares.qbittorrent-stripprefix.stripPrefix.prefixes=/qbittorrent
-      # https://community.traefik.io/t/middleware-to-add-the-if-needed/1895/19
-      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.regex=(^.*\/qbittorrent$$)
-      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.replacement=$$1/
-      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.permanent=false
-      #- com.centurylinklabs.watchtower.depends-on=/vpn
       - homepage.group=Download
       - homepage.name=qBittorrent
       - homepage.icon=qbittorrent.png
@@ -282,37 +251,40 @@ services:
       - homepage.description=Bittorrent client
       - homepage.weight=2
       - homepage.widget.type=qbittorrent
-      - homepage.widget.url=http://vpn:8080
+      - homepage.widget.url=http://gluetun:8080
       - homepage.widget.username=${QBITTORRENT_USERNAME}
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
-  vpn:
-    image: ghcr.io/thrnz/docker-wireguard-pia:latest
-    container_name: vpn
-    volumes:
-      - ${CONFIG_ROOT:-.}/pia:/pia
-      - ${CONFIG_ROOT:-.}/pia-shared:/pia-shared
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+
+  qbit_manage:
+    container_name: qbit_manage
+    image: ghcr.io/stuffanthings/qbit_manage:latest
+    restart: unless-stopped
     environment:
-      - LOC=${PIA_LOCATION}
-      - USER=${PIA_USER}
-      - PASS=${PIA_PASS}
-      - QBT_USER=${QBITTORRENT_USERNAME}
-      - QBT_PASS=${QBITTORRENT_PASSWORD}
-      - LOCAL_NETWORK=${PIA_LOCAL_NETWORK}
-      - PORT_FORWARDING=1
-      - PORT_PERSIST=1
-      - PORT_SCRIPT=/pia-shared/portupdate-qbittorrent.sh
-      - FIREWALL=0
-      - ACTIVE_HEALTHCHECKS=1
-      - RECONNECT=1
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv6.conf.default.disable_ipv6=1
-      - net.ipv6.conf.all.disable_ipv6=1
-      - net.ipv6.conf.lo.disable_ipv6=1
-    restart: always
+      - TZ=${TIMEZONE}
+      - QBT_WEB_SERVER=true
+      - QBT_WEB_PORT=8080
+      - QBT_BASE_URL=/qbit-manager
+      - QBT_SCHEDULE=15      # Runs every 60 minutes
+    volumes:
+      - ${BASE_DOCKER_DATA_PATH}/qbit_manage/config:/config
+      - ${DOWNLOAD_ROOT}:/data/torrents
+    depends_on:
+      - gluetun # Needs to talk to qBittorrent
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.qbm.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/qbit-manager`)
+      - traefik.http.routers.qbm.entrypoints=https
+      - traefik.http.routers.qbm.tls=true
+      - traefik.http.services.qbm.loadbalancer.server.port=8080
+      
+      - homepage.group=Download
+      - homepage.name=qBittorrent Manager
+      - homepage.icon=qbittorrent.png
+      - homepage.href=/qbit-manager/
+      - homepage.description=Bittorrent client
+      - homepage.weight=2
+
+
   unpackerr:
     image: ghcr.io/unpackerr/unpackerr:latest
     container_name: unpackerr
@@ -341,34 +313,6 @@ services:
       - TZ=${TIMEZONE}
       - PUID=${USER_ID}
       - PGID=${GROUP_ID}
-  sabnzbd:
-    image: lscr.io/linuxserver/sabnzbd:latest
-    container_name: sabnzbd
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT:-.}/sabnzbd:/config
-      - ${DATA_ROOT}:/data
-    restart: always
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.sabnzbd.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/sabnzbd`) || PathPrefix(`/sabnzbd`))
-      - traefik.http.routers.sabnzbd.tls=true
-      - traefik.http.routers.sabnzbd.tls.certresolver=myresolver
-      - traefik.http.services.sabnzbd.loadbalancer.server.port=8080
-      - homepage.group=Download
-      - homepage.name=Sabnzbd
-      - homepage.icon=sabnzbd.png
-      - homepage.href=/sabnzbd
-      - homepage.description=Usenet
-      - homepage.weight=3
-      - homepage.widget.type=sabnzbd
-      - homepage.widget.url=http://sabnzbd:8080/sabnzbd
-      - homepage.widget.key=${SABNZBD_API_KEY}
-    profiles:
-      - sabnzbd
   jellyfin:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
@@ -383,6 +327,7 @@ services:
     ports:
       - "7359:7359/udp"
       - "1900:1900/udp"
+      - "8096:8096"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8096/jellyfin/health"]
@@ -390,9 +335,9 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.jellyfin.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/jellyfin`))
+      - traefik.http.routers.jellyfin.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyfin`)
       - traefik.http.routers.jellyfin.tls=true
-      - traefik.http.routers.jellyfin.tls.certresolver=myresolver
+      - traefik.http.routers.jellyfin.entrypoints=https
       - traefik.http.services.jellyfin.loadbalancer.server.port=8096
       - homepage.group=Media
       - homepage.name=Jellyfin
@@ -403,41 +348,6 @@ services:
       - homepage.widget.type=jellyfin
       - homepage.widget.url=http://jellyfin:8096/jellyfin
       - homepage.widget.key=${JELLYFIN_API_KEY}
-  calibre-web:
-    image: lscr.io/linuxserver/calibre-web:latest
-    container_name: calibre-web
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-      - DOCKER_MODS=linuxserver/mods:universal-calibre
-      - OAUTHLIB_RELAX_TOKEN_SCOPE=1
-    volumes:
-      - ${CONFIG_ROOT:-.}/calibre-web:/config
-      - ${DATA_ROOT}/books:/books
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.middlewares.calibre-headers.headers.customRequestHeaders.X-Scheme=https
-      - traefik.http.middlewares.calibre-headers.headers.customRequestHeaders.X-Script-Name=/calibre
-      - traefik.http.middlewares.calibre-stripprefixregex.stripPrefixRegex.regex=/calibre
-      - traefik.http.routers.calibre.middlewares=calibre-headers,calibre-stripprefixregex
-      - traefik.http.routers.calibre.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/calibre`))
-      - traefik.http.routers.calibre.tls=true
-      - traefik.http.routers.calibre.tls.certresolver=myresolver
-      - traefik.http.services.calibre.loadbalancer.server.port=8083
-      - homepage.group=Media
-      - homepage.name=Calibre-Web
-      - homepage.icon=calibre-web.png
-      - homepage.href=/calibre
-      - homepage.description=Books management
-      - homepage.weight=5
-      - homepage.widget.type=calibreweb
-      - homepage.widget.url=http://calibre-web:8083
-      - homepage.widget.username=${CALIBRE_USERNAME}
-      - homepage.widget.password=${CALIBRE_PASSWORD}
-    profiles:
-      - calibre-web
   decluttarr:
     image: ghcr.io/manimatter/decluttarr:latest
     container_name: decluttarr
@@ -452,7 +362,7 @@ services:
       - SONARR_KEY=${SONARR_API_KEY}
       - LIDARR_URL=http://lidarr:8686/lidarr
       - LIDARR_KEY=${LIDARR_API_KEY}
-      - QBITTORRENT_URL=http://qbittorrent:8080
+      - QBITTORRENT_URL=http://gluetun:8080
       - QBITTORRENT_USERNAME=${QBITTORRENT_USERNAME}
       - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
       - LOG_LEVEL=${DECLUTTARR_LOG_LEVEL:-INFO}
@@ -474,6 +384,7 @@ services:
       - IGNORED_DOWNLOAD_CLIENTS=${DECLUTTARR_IGNORED_DOWNLOAD_CLIENTS:-}
     profiles:
       - decluttarr
+  
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
@@ -486,7 +397,7 @@ services:
       - HOMEPAGE_VAR_WEATHER_LONG=${HOMEPAGE_VAR_WEATHER_LONG}
       - HOMEPAGE_VAR_WEATHER_TIME=${TIMEZONE}
       - HOMEPAGE_VAR_WEATHER_UNIT=${HOMEPAGE_VAR_WEATHER_UNIT}
-      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME}
+      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME},thinkpadserver:3137,${TAILSCALE_HOSTNAME}
     volumes:
       - ${CONFIG_ROOT:-.}/homepage:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -496,10 +407,11 @@ services:
       [sh, -c, "cp -n /app/config/tpl/*.yaml /app/config && node server.js"]
     labels:
       - traefik.enable=true
-      - traefik.http.routers.homepage.rule=(Host(`${HOSTNAME}`) && PathPrefix(`/`))
+      - traefik.http.routers.homepage.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/`)
+      - traefik.http.routers.homepage.entrypoints=https
       - traefik.http.routers.homepage.tls=true
-      - traefik.http.routers.homepage.tls.certresolver=myresolver
       - traefik.http.services.homepage.loadbalancer.server.port=3000
+  
   watchtower:
     image: ghcr.io/nicholas-fedor/watchtower:latest
     container_name: watchtower
@@ -516,6 +428,395 @@ services:
       - AUTOHEAL_CONTAINER_LABEL=all
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  glances:
+      image: nicolargo/glances:latest-full
+      container_name: glances
+      restart: unless-stopped
+      pid: host
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+        # Uncomment if you want OS details
+        # - /etc/os-release:/etc/os-release:ro
+      environment:
+        - "GLANCES_OPT=-w"
+      # Connect to the same default network as everything else
+      # (No need to specify 'networks' if we use the default one)
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.glances.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/glances`)
+        - traefik.http.routers.glances.tls=true
+        - traefik.http.routers.glances.entrypoints=https
+        - traefik.http.services.glances.loadbalancer.server.port=61208
+        
+        # --- NEW MIDDLEWARE SECTION ---
+        # 1. Register the middlewares
+        - traefik.http.routers.glances.middlewares=glances-strip-slash,glances-stripprefix
+        
+        # 2. Define "Strip Prefix" (Converts "/glances" to "/")
+        - traefik.http.middlewares.glances-stripprefix.stripPrefix.prefixes=/glances
+        
+        # 3. Define "Slash Redirect" (Ensures css loads by forcing "/glances" to become "/glances/")
+        - traefik.http.middlewares.glances-strip-slash.redirectregex.regex=(^.*\/glances$$)
+        - traefik.http.middlewares.glances-strip-slash.redirectregex.replacement=$$1/
+        - traefik.http.middlewares.glances-strip-slash.redirectregex.permanent=false
+        
+        # --- HOMEPAGE CONFIG ---
+        - homepage.group=System
+        - homepage.name=Glances
+        - homepage.icon=glances.png
+        - homepage.href=/glances/ 
+        - homepage.description=System Monitoring
+        - homepage.weight=-10
+        - homepage.widget.type=glances
+        - homepage.widget.version=4
+        - homepage.widget.url=http://glances:61208
+        - homepage.widget.metric=info
+  
+  # 1. THE VPN CONTAINER (Gluetun)
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8090:8080 # This allows you to access qBitTorrent WebUI on your LAN
+      # Note: We do NOT map the torrent port (e.g. 34892) here. 
+      # It comes in through the VPN tunnel, not your router.
+    environment:
+      - VPN_SERVICE_PROVIDER=airvpn
+      - VPN_TYPE=wireguard
+      # --- YOUR KEYS GO HERE ---
+      - WIREGUARD_PRIVATE_KEY=${AIRVPN_PRIVATE_KEY}
+      - WIREGUARD_PRESHARED_KEY=${AIRVPN_PRESHARED_KEY}
+      - WIREGUARD_ADDRESSES=${AIRVPN_ADDRESS}
+      # -------------------------
+      # Put the 5-digit port you got in Phase 2 here:
+      - FIREWALL_VPN_INPUT_PORTS=${AIRVPN_OPEN_PORT}
+      - SERVER_COUNTRIES=${AIRVPN_SERVER_COUNTRIES} # Match the country you generated configs for
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.1.0/24,192.37.73.0/24
+    restart: always
+    labels:
+      # --- TRAEFIK LABELS MOVED HERE ---
+      - traefik.enable=true
+      
+      # Router Rule
+      - traefik.http.routers.qbittorrent.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/qbittorrent`)
+      - traefik.http.routers.qbittorrent.entrypoints=https
+      - traefik.http.routers.qbittorrent.tls=true
+      
+      # Service Port (IMPORTANT: Use the INTERNAL port 8080)
+      - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
+      
+      # Middlewares (Strip Prefix / Slash)
+      - traefik.http.routers.qbittorrent.middlewares=qbittorrent-strip-slash,qbittorrent-stripprefix
+      - traefik.http.middlewares.qbittorrent-stripprefix.stripPrefix.prefixes=/qbittorrent
+      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.regex=(^.*\/qbittorrent$$)
+      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.replacement=$$1/
+      - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.permanent=false
+
+# --- FILEBROWSER ---
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    volumes:
+      # Point to where you moved the files in Phase 1
+      - ./filebrowser/my-data:/srv
+      - ./filebrowser/filebrowser.db:/database/filebrowser.db
+    environment:
+      - FB_BASEURL=/filebrowser
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.filebrowser.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/filebrowser`)
+      - traefik.http.routers.filebrowser.tls=true
+      - traefik.http.routers.filebrowser.entrypoints=https
+      - traefik.http.services.filebrowser.loadbalancer.server.port=80
+      # Homepage
+      - homepage.group=Utilities
+      - homepage.name=FileBrowser
+      - homepage.href=/filebrowser/
+      - homepage.icon=filebrowser.png
+      - homepage.description=Web File Manager
+      - homepage.widget.type=filebrowser
+      - homepage.widget.url=http://filebrowser:80
+      - homepage.widget.username=admin
+      - homepage.widget.password=PEK2fYWbCN3_gBSL # Update this   
+      - homepage.widget.authHeader=X-My-Header # If using Proxy header authentication
+
+# --- Autobrr ---
+# Ratio builder for torrent
+#   (fetches torrents as soon as they're published and seeds it to "farm" free ratio)
+  autobrr:
+    container_name: autobrr
+    image: ghcr.io/autobrr/autobrr:latest
+    restart: unless-stopped
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${BASE_DOCKER_DATA_PATH}/autobrr/config:/config
+    labels:
+      - traefik.enable=true
+      
+      # 1. Router Rule: Catch traffic for /autobrr
+      - traefik.http.routers.autobrr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))  && PathPrefix(`/autobrr`)
+      - traefik.http.services.autobrr.loadbalancer.server.port=7474
+      - traefik.http.routers.autobrr.tls=true
+      - traefik.http.routers.autobrr.entrypoints=https
+      
+      # 3. Middleware: Strip the "/autobrr" prefix before sending to the app
+      # Create a middleware named "autobrr-slash
+      - traefik.http.middlewares.autobrr-slash.redirectregex.regex=^(.*)/autobrr$$
+      - traefik.http.middlewares.autobrr-slash.redirectregex.replacement=$$1/autobrr/
+      # B. Strip the Prefix
+      # (This fixes the 405 API error by hiding the subfolder from the app)
+      - traefik.http.middlewares.autobrr-strip.stripprefix.prefixes=/autobrr
+      # Apply them (Order: Redirect first, then Strip)
+      - traefik.http.routers.autobrr.middlewares=autobrr-slash,autobrr-strip
+
+      
+      # 4. Homepage Integration (Optional, if you want it on your dashboard)
+      - homepage.group=Utilities
+      - homepage.name=Autobrr
+      - homepage.icon=autobrr.png
+      - homepage.href=/autobrr
+      - homepage.description=Ratio Builder
+
+
+
+# --- TESLAMATE ---
+  teslamate:
+    image: teslamate/teslamate:latest
+    restart: always
+    # 1. Open the port directly to your network
+    ports:
+      - "4000:4000"
+    environment:
+      - ENCRYPTION_KEY=${TESLAMATE_ENCRYPTION_KEY}
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${TESLAMATE_DB_PASS}
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=teslamate-db
+      - MQTT_HOST=teslamate-mqtt
+    labels:
+      # Disable Traefik for the main web interface (it cannot handle the subpath)
+      - traefik.enable=false
+      # Homepage config
+      - homepage.group=Home Server
+      - homepage.name=TeslaMate
+      - homepage.href=http://${HOSTNAME}:4000
+      - homepage.icon=teslamate.png
+      # Homepage - Widget config
+      - homepage.widget.type=customapi
+      - homepage.widget.url=http://teslamateapi:8080/api/v1/cars/1/status  # Point it to the API container we just added
+      - homepage.widget.method=GET
+      # Field 1: Battery
+      - homepage.widget.mappings.0.label=Battery
+      - homepage.widget.mappings.0.field=data.status.battery_details.battery_level
+      - homepage.widget.mappings.0.suffix=%
+      # Field 2: Range (Rated)
+      - homepage.widget.mappings.1.label=Range
+      - homepage.widget.mappings.1.field=data.status.battery_details.est_battery_range  
+      - homepage.widget.mappings.1.suffix=km
+      # Field 3: Status (asleep, driving, etc)
+      - homepage.widget.mappings.2.label=Temp
+      - homepage.widget.mappings.2.field=data.status.climate_details.inside_temp
+      - homepage.widget.mappings.2.suffix=°C
+      # Field 4: Odometer
+      - homepage.widget.mappings.3.label=Mileage
+      - homepage.widget.mappings.3.field=data.status.odometer
+      - homepage.widget.mappings.3.format=number
+      - homepage.widget.mappings.3.suffix=km
+
+
+    volumes:
+      - ./teslamate/import:/opt/app/import
+    cap_drop:
+      - all
+
+  teslamate-db:
+    image: postgres:17
+    restart: always
+    environment:
+      - POSTGRES_USER=teslamate
+      - POSTGRES_PASSWORD=${TESLAMATE_DB_PASS}
+      - POSTGRES_DB=teslamate
+    volumes:
+      - teslamate-db:/var/lib/postgresql/data
+
+  teslamate-grafana:
+    image: teslamate/grafana:latest
+    restart: always
+    environment:
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${TESLAMATE_DB_PASS}
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=teslamate-db
+      - GF_AUTH_BASIC_ENABLED=true
+      - GF_SERVER_ROOT_URL=https://${HOSTNAME}/teslamate-grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.teslamate-grafana.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/teslamate-grafana`)
+      - traefik.http.routers.teslamate-grafana.tls=true
+      - traefik.http.routers.teslamate-grafana.entrypoints=https
+      - traefik.http.services.teslamate-grafana.loadbalancer.server.port=3000
+      - homepage.group=Home Server
+      - homepage.name=Tesla Grafana
+      - homepage.href=/teslamate-grafana/
+      - homepage.icon=grafana.png
+    volumes:
+      # 👇 This connects to the "adopted" volume below
+      - teslamate-grafana-data:/var/lib/grafana
+
+  teslamate-mqtt:
+    image: eclipse-mosquitto:2
+    restart: always
+    command: mosquitto -c /mosquitto-no-auth.conf
+    volumes:
+      # 👇 Updated to "adopt" the old config/data volumes
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+  teslamateapi:
+    image: tobiasehlert/teslamateapi:latest
+    restart: always
+    # --- ADD THIS SECTION ---
+    ports:
+      - "8124:8080"
+    # ------------------------
+    environment:
+      - DATABASE_USER=teslamate
+      - DATABASE_PASS=${TESLAMATE_DB_PASS}
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=teslamate-db
+      - MQTT_HOST=teslamate-mqtt
+      - TZ=${TIMEZONE}
+    depends_on:
+      - teslamate-db
+      - teslamate-mqtt
+
+
+# --- IMMICH ---
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    command: [ "start.sh", "immich" ]
+    volumes:
+      - ${IMMICH_UPLOAD_LOCATION}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=${IMMICH_DB_USERNAME}
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME}
+      - REDIS_HOSTNAME=immich-redis
+      - DB_PORT=5432
+      - REDIS_PORT=6379
+      - IMMICH_EXTERNAL_DOMAIN=https://${TAILSCALE_HOSTNAME}/photos
+    depends_on:
+      - immich-redis
+      - immich-postgres
+    restart: always
+    labels:
+      - traefik.enable=true
+      
+      # --- 1. THE HTTPS ROUTER ---
+      - traefik.http.routers.immich-secure.rule=Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)
+      - traefik.http.routers.immich-secure.entrypoints=immich-https
+      - traefik.http.routers.immich-secure.tls=true
+      - traefik.http.routers.immich-secure.service=immich-service
+
+      # --- 2. THE HTTP ROUTER (The one that redirects) ---
+      - traefik.http.routers.immich-http.rule=Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)
+      - traefik.http.routers.immich-http.entrypoints=immich-https
+      - traefik.http.routers.immich-http.middlewares=immich-port-redirect
+
+      # --- 3. THE REDIRECT MIDDLEWARE (Regex) ---
+      # This captures the request and replaces http with https while keeping the rest (port included)
+      - traefik.http.middlewares.immich-port-redirect.redirectregex.regex=^http://(.*)
+      - traefik.http.middlewares.immich-port-redirect.redirectregex.replacement=https://$$1
+      - traefik.http.middlewares.immich-port-redirect.redirectregex.permanent=false
+
+      # Internal port for Immich is still 2283
+      - traefik.http.services.immich-service.loadbalancer.server.port=2283
+      
+      - homepage.group=Media
+      - homepage.name=Immich
+      - homepage.icon=immich.png
+      - homepage.href=https://${TAILSCALE_HOSTNAME}:2283
+      - homepage.description=Photos Backup
+      - homepage.widget.type=immich
+      - homepage.widget.url=http://immich-server:2283
+      - homepage.widget.key=${IMMICH_API_KEY}
+      - homepage.widget.version=2
+      - homepage.container=immich_server
+      - homepage.server=my-docker
+
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      # This still uses the named volume
+      - immich-model-cache:/cache
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=${IMMICH_DB_USERNAME}
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME}
+      - REDIS_HOSTNAME=immich-redis
+    restart: always
+
+  immich-redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8
+    restart: always
+    healthcheck:
+      test: redis-cli ping || exit 1
+
+  immich-postgres:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    environment:
+      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD}
+      POSTGRES_USER: ${IMMICH_DB_USERNAME}
+      POSTGRES_DB: ${IMMICH_DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      # DIRECT BIND MOUNT to your existing DB folder
+      - ${IMMICH_DB_DATA_LOCATION}:/var/lib/postgresql/data
+    restart: always
+    shm_size: 128mb
+
+
+
+
+volumes:
+  # ... (your existing volumes for sonarr/radarr etc) ...
+
+  # Adopting the old volumes:
+  teslamate-db:
+    external: true
+    name: teslamate_teslamate-db
+
+  teslamate-grafana-data:
+    external: true
+    name: teslamate_teslamate-grafana-data
+
+  mosquitto-conf:
+    external: true
+    name: teslamate_mosquitto-conf
+
+  mosquitto-data:
+    external: true
+    name: teslamate_mosquitto-data
+
+  immich-model-cache:
+    external: true
+    name: immich_model-cache
 
 networks:
   default:

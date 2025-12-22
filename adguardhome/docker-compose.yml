@@ -24,7 +24,7 @@ services:
           "CMD",
           "sh",
           "-c",
-          "ip addr show | grep -F '10.0.0.10' >/dev/null && wget -qO /dev/null http://127.0.0.1:3000",
+          "ip addr show | grep -F '10.0.0.10' >/dev/null && wget -qO /dev/null http://127.0.0.1:80",
         ]
       interval: 1m
       retries: 10
@@ -39,6 +39,7 @@ services:
       - "68:68/tcp"
       - "68:68/udp"
       - "853:853/tcp"
+      - "3001:80/tcp"
     volumes:
       - ./adguardhome/work:/opt/adguardhome/work
       - ./adguardhome/conf:/opt/adguardhome/conf
@@ -46,18 +47,18 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=docker-compose-nas"
-      - "traefik.http.services.adguardhome.loadbalancer.server.port=3000"
-      - "traefik.http.routers.adguardhome.rule=(Host(`${ADGUARD_HOSTNAME}`))"
+      - "traefik.http.services.adguardhome.loadbalancer.server.port=80"
+      - "traefik.http.routers.adguardhome.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`${ADGUARD_HOSTNAME}`)"
       - "traefik.http.routers.adguardhome.tls=true"
       - "traefik.http.routers.adguardhome.tls.certresolver=myresolver"
       - homepage.group=Utilities
       - homepage.name=Adguard
       - homepage.icon=adguard-home.png
-      - homepage.href=https://${ADGUARD_HOSTNAME}
+      - homepage.href=https://${TAILSCALE_HOSTNAME}:3001
       - homepage.description=DNS Adblocker
       - homepage.weight=0
       - homepage.widget.type=adguard
-      - homepage.widget.url=https://${ADGUARD_HOSTNAME}
+      - homepage.widget.url=http://adguardhome:80
       - homepage.widget.username=${ADGUARD_USERNAME}
       - homepage.widget.password=${ADGUARD_PASSWORD}
     profiles:

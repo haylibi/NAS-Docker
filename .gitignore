@@ -23,3 +23,8 @@ docker-compose.override.yml
 /cleanuparr/*
 !/cleanuparr/blacklist.json
 !/cleanuparr/logs/.gitkeep
+filebrowser/my-data/*
+teslamate/docker-compose.yml
+filebrowser/filebrowser.db
+traefik_config/certificates/thinkpadserver.tail48aaac.ts.net.crt
+traefik_config/certificates/thinkpadserver.tail48aaac.ts.net.key
