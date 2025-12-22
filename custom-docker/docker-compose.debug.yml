@@ -1,0 +1,6 @@
+services:
+  jellyfin-webhooks:
+    environment:
+      - ENABLE_DEBUGPY=true
+    ports:
+      - "5678:5678"

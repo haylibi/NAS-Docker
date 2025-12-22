@@ -34,3 +34,9 @@ teslamate/backups/grafana.tar.gz.1
 teslamate/backups/grafana.tar.gz.2
 teslamate/backups/teslamate.bck.1
 teslamate/backups/teslamate.bck.2
+*.venv
+.vscode/*
+**/__pycache__/*
+custom-docker/jellyfin-webhooks/data/settings.json
+.gitignore
+custom-docker/jellyfin-webhooks/data/app.log

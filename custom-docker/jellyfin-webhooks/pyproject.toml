@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jellyfin_webhooks"
+version = "0.1.0"
+dependencies = [
+    "flask", 
+    "requests",
+]
+description = "A webhook listener for Jellyfin"
+# Remove or comment out the readme line if you don't have a README.md file
+# readme = "README.md" 
+requires-python = ">=3.9"
+
+[tool.setuptools]
+# This tells setuptools: "Only look for these specific folders"
+packages = ["jellyfin_webhooks", "jellyfin_webhooks.dashboard", "jellyfin_webhooks.endpoints", "jellyfin_webhooks.utils"]
+
+[project.scripts]
+jellyfin_webhooks = "jellyfin_webhooks.main:run_app"

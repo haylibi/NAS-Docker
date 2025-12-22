@@ -2,14 +2,31 @@ services:
   jellyfin-webhooks:
     container_name: jellyfin-webhooks
     build: 
-      context: ./jellyfin-webhooks
+      context: ./custom-docker/jellyfin-webhooks
     restart: unless-stopped
     environment:
       - QBT_HOST=${QBITTORRENT_HOST}
       - QBT_USER=${QBITTORRENT_USERNAME}
       - QBT_PASS=${QBITTORRENT_PASSWORD}
       - LOG_LEVEL=INFO
+      - JELLYFIN_WEBHOOK_DEBUG_MODE=false
+      - JELLYFIN_WEBHOOK_BASE_URL=/jellyfin-webhooks/
     ports:
       - "5000:5000"
     depends_on:
       - gluetun
+    volumes:
+      - ./custom-docker/jellyfin-webhooks/data:/app/data # Map internal files to your host
+      - ./custom-docker/jellyfin-webhooks/jellyfin_webhooks:/app/jellyfin_webhooks
+    
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.jellyfin_webhook.loadbalancer.server.port=5000
+      - "traefik.http.routers.jellyfin_webhook.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyfin-webhooks`)"
+      - "traefik.http.routers.jellyfin_webhook.tls=true"
+      
+      - homepage.group=Utilities
+      - homepage.name=Jellyfin Webhooks
+      - homepage.icon=jellyfin.png
+      - homepage.href=https://${TAILSCALE_HOSTNAME}/jellyfin-webhooks/
+      - homepage.description=Webhook UI for Jellyfin
