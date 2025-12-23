@@ -16,15 +16,21 @@ def main():
     
     # Logic: Only tag if Playback Stop + >90% watched
     # For dry_run, we process it regardless of events to test connectivity/matching
-    should_process = (data.get('NotificationType') == 'PlaybackStop' and data.get('PlayedPercentage', 0) > 90) or dry_run
+    # We use 'or 0' because if the string is empty "", int() would crash.
+    position_ticks = int(data.get('Playback', {}).get('PositionTicks', 0) or 0)
+    total_ticks = int(data.get('Item', {}).get('RunTimeTicks', 0) or 1) # avoid divide by zero
+    
+    # 2. Calculate Percentage
+    played_percentage = (position_ticks / total_ticks) * 100
+
+    should_process = (data.get('NotificationType') == 'PlaybackStop' and played_percentage > 90) or dry_run
 
     if should_process:
-        media_name = data.get('Name', '')
+        media_name = data.get('Item', {}).get('Name', '')
         
         # If dry_run is True and we have a media_name, it might be a manual test
         log_prefix = "[DRY RUN]" if dry_run else "[LIVE]"
-        current_app.logger.info(f"{log_prefix} Processing watched event for: {media_name}")
-        
+        current_app.logger.info(f"{log_prefix} Processing watched event for: {media_name} (Watched {int(played_percentage)}%)")
         tagged_torrents = []
         
         try:
@@ -38,6 +44,9 @@ def main():
             torrents = qbt_client.torrents_info()
             found = False
             for torrent in torrents:
+                # TODO: Find a better way to match `media` to `torrent`
+                #   More specifically, when we download a ENTIRE season, we should only
+                #   Change the name to `watched` once `ep` == `last`
                 if media_name.lower() in torrent.name.lower():
                     if not dry_run:
                         torrent.add_tags(tags='watched')
