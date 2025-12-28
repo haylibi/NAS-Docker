@@ -39,7 +39,6 @@ services:
       - "68:68/tcp"
       - "68:68/udp"
       - "853:853/tcp"
-      - "3001:80/tcp"
     volumes:
       - ./adguardhome/work:/opt/adguardhome/work
       - ./adguardhome/conf:/opt/adguardhome/conf
@@ -48,9 +47,10 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=docker-compose-nas"
       - "traefik.http.services.adguardhome.loadbalancer.server.port=80"
-      - "traefik.http.routers.adguardhome.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`${ADGUARD_HOSTNAME}`)"
+      - "traefik.http.routers.adguardhome.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
       - "traefik.http.routers.adguardhome.tls=true"
-      - "traefik.http.routers.adguardhome.tls.certresolver=myresolver"
+      - "traefik.http.routers.adguardhome.entrypoints=adguard-secure"
+  
       - homepage.group=Utilities
       - homepage.name=Adguard
       - homepage.icon=adguard-home.png
