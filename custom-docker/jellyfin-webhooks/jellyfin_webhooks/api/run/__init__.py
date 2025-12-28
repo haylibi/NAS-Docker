@@ -1,11 +1,13 @@
 from flask import Blueprint, jsonify, current_app
-from backend.utils.constants import constants as c
+from jellyfin_webhooks.utils.constants import constants as c
 import qbittorrentapi
+from jellyfin_webhooks.utils.decorators import log_request
 
 route = Blueprint('api/run', __name__, template_folder='templates')
 
 
 @route.route(f'{c.BASE_URL}/api/run/<webhook_id>', methods=['POST'])
+@log_request(category="api", endpoint="run/webhook_id")
 def post_run(webhook_id):
     current_app.logger.info(f"MANUAL RUN: Triggered for {webhook_id}")
     

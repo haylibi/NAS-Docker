@@ -4,10 +4,10 @@ import { WebhookConfig } from '../types';
 interface InternalProps {
     webhooks: WebhookConfig[];
     onDryRun: (hook: WebhookConfig) => void;
-    onLogs: (hook: WebhookConfig) => void;
+    onNetwork: (hook: WebhookConfig) => void;
 }
 
-export const WebhooksTable: React.FC<InternalProps> = ({ webhooks, onDryRun, onLogs }: InternalProps) => {
+export const WebhooksTable: React.FC<InternalProps> = ({ webhooks, onDryRun, onNetwork }: InternalProps) => {
     return (
         <div className="bg-black font-mono text-sm border border-zinc-800 mb-8 w-full">
             <div className="grid grid-cols-12 p-2 border-b border-zinc-900 bg-zinc-900 font-bold text-zinc-400">
@@ -36,18 +36,21 @@ export const WebhooksTable: React.FC<InternalProps> = ({ webhooks, onDryRun, onL
                         >
                             Dry Run
                         </button>
+
                         <button
-                            onClick={() => onLogs(hook)}
-                            className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded border border-zinc-700 text-zinc-300"
+                            onClick={() => onNetwork(hook)}
+                            className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded border border-zinc-700 text-blue-300"
                         >
-                            Logs
+                            Requests
                         </button>
                     </div>
+
                     <span className="col-span-2 text-zinc-500 font-mono text-xs overflow-x-auto whitespace-nowrap bg-zinc-900/50 p-1 rounded text-right">
                         {hook.endpoint}
                     </span>
                 </div>
-            ))}
-        </div>
+            ))
+            }
+        </div >
     );
 };

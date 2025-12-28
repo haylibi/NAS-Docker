@@ -2,12 +2,24 @@
 import { useEffect, useState } from 'react';
 import { LogTable } from './components/LogTable';
 import { WebhooksTable } from './components/WebhooksTable';
+import { DevLogTable } from './components/DevLogTable';
 import { DryRunModal } from './components/DryRunModal';
-import { ApiResponse, LogEntry, WebhookConfig } from './types';
+import { NetworkView } from './components/NetworkView';
+import { ApiResponse, LogEntry, RequestLogEntry, WebhookConfig, EndpointLog } from './types';
+
+interface NetworkTarget {
+    category: string;
+    endpoint: string;
+    name: string;
+}
 
 const App = () => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+    const [endpoints, setEndpoints] = useState<EndpointLog[]>([]);
+
+    // View Mode
+    const [activeTab, setActiveTab] = useState<'webhooks' | 'devlogs'>('webhooks');
 
     // Logs Pagination & Filtering
     const [page, setPage] = useState(1);
@@ -16,8 +28,14 @@ const App = () => {
 
     // Modals & Action State
     const [selectedDryRunWebhook, setSelectedDryRunWebhook] = useState<WebhookConfig | null>(null);
-    const [webhookLogs, setWebhookLogs] = useState<LogEntry[] | null>(null); // Null means not showing modal
-    const [selectedWebhook, setSelectedWebhook] = useState<string | null>(null); // For Logs Modal Title
+    const [networkLogs, setNetworkLogs] = useState<RequestLogEntry[] | null>(null);
+
+    // Generic Network View Target
+    const [selectedNetworkTarget, setSelectedNetworkTarget] = useState<NetworkTarget | null>(null);
+
+    const [networkPage, setNetworkPage] = useState(1);
+    const [networkTotalPages, setNetworkTotalPages] = useState(1);
+    const [networkTotalItems, setNetworkTotalItems] = useState(1);
 
     const fetchLogs = async (p: number, level: string) => {
         try {
@@ -40,27 +58,59 @@ const App = () => {
         }
     };
 
+    const fetchEndpoints = async () => {
+        try {
+            const res = await fetch(`api/requests/endpoints`);
+            const json: ApiResponse = await res.json();
+            setEndpoints(json.data);
+        } catch (err) {
+            console.error("Failed to fetch endpoints", err);
+        }
+    };
+
+    const fetchRequestLogs = async (category: string, endpoint: string, p: number) => {
+        try {
+            const res = await fetch(`api/requests/${category}/${endpoint}?page=${p}&per_page=50`);
+            const json: ApiResponse = await res.json();
+            setNetworkLogs(json.data);
+            setNetworkTotalPages(json.metadata?.total_pages || 1);
+            setNetworkTotalItems(json.metadata.total_items || 0);
+        } catch (err) {
+            console.error("Failed to fetch request logs", err);
+        }
+    };
+
     // --- Action Handlers ---
 
     const handleDryRun = (hook: WebhookConfig) => {
         setSelectedDryRunWebhook(hook);
     };
 
-    const handleLogs = async (hook: WebhookConfig) => {
-        // Filter main logs for this webhook (client-side filtering for simplicity for now)
-        // Ideally backend would support filtering by source, but we don't store source structured yet.
-        // We will filter by checking if the log message contains the webhook ID/Name or related keywords.
-        // Since we only have 'app.log', we might just show ALL logs in the modal for now, or fetch fresh.
-        // Let's reuse the existing logs but filter them.
-
-        // Better approach: Since user wants to see logs *for that webhook*, let's just show the main log table
-        // filtered by a search term, OR just open a modal with *all* logs if specific filtering isn't implemented.
-        // Given the prompt "Logs for that webhook", let's try to filter by Webhook Name.
-        setSelectedWebhook(hook.name);
-        const relevantLogs = logs.filter((l: LogEntry) => l.msg.toLowerCase().includes(hook.name.toLowerCase()));
-        setWebhookLogs(relevantLogs);
+    const handleNetworkWebhook = (hook: WebhookConfig) => {
+        setSelectedNetworkTarget({
+            category: 'webhook', // Current assumption for webhooks
+            endpoint: hook.id,
+            name: hook.name
+        });
+        setNetworkPage(1);
+        fetchRequestLogs('webhook', hook.id, 1);
     };
 
+    const handleNetworkEndpoint = (ep: EndpointLog) => {
+        setSelectedNetworkTarget({
+            category: ep.category,
+            endpoint: ep.name, // The backend uses the 'name' as the filename/endpoint ID usually
+            name: `${ep.category}/${ep.name}`
+        });
+        setNetworkPage(1);
+        fetchRequestLogs(ep.category, ep.name, 1);
+    };
+
+    useEffect(() => {
+        if (selectedNetworkTarget) {
+            fetchRequestLogs(selectedNetworkTarget.category, selectedNetworkTarget.endpoint, networkPage);
+        }
+    }, [networkPage, selectedNetworkTarget]);
 
     useEffect(() => {
         fetchLogs(page, minLevel);
@@ -68,7 +118,15 @@ const App = () => {
 
     useEffect(() => {
         fetchWebhooks();
+        fetchEndpoints();
     }, []);
+
+    // Refresh endpoints when switching to devlogs
+    useEffect(() => {
+        if (activeTab === 'devlogs') {
+            fetchEndpoints();
+        }
+    }, [activeTab]);
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-8 w-full">
@@ -78,11 +136,38 @@ const App = () => {
             </header>
 
             <section className="mb-12 w-full">
-                <h2 className="text-xl font-semibold mb-4 text-zinc-300 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                    Configured Webhooks
-                </h2>
-                <WebhooksTable webhooks={webhooks} onDryRun={handleDryRun} onLogs={handleLogs} />
+                <div className="flex gap-6 mb-4 border-b border-zinc-800">
+                    <button
+                        onClick={() => setActiveTab('webhooks')}
+                        className={`pb-2 text-sm font-bold uppercase tracking-wide transition-colors ${activeTab === 'webhooks' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Configured Webhooks
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('devlogs')}
+                        className={`pb-2 text-sm font-bold uppercase tracking-wide transition-colors ${activeTab === 'devlogs' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Dev Logs / Admin
+                    </button>
+                </div>
+
+                {activeTab === 'webhooks' ? (
+                    <>
+                        <h2 className="text-xl font-semibold mb-4 text-zinc-300 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            Webhooks
+                        </h2>
+                        <WebhooksTable webhooks={webhooks} onDryRun={handleDryRun} onNetwork={handleNetworkWebhook} />
+                    </>
+                ) : (
+                    <>
+                        <h2 className="text-xl font-semibold mb-4 text-zinc-300 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                            System Endpoints
+                        </h2>
+                        <DevLogTable endpoints={endpoints} onNetwork={handleNetworkEndpoint} />
+                    </>
+                )}
             </section>
 
             <section>
@@ -133,26 +218,20 @@ const App = () => {
                 onClose={() => setSelectedDryRunWebhook(null)}
             />
 
-            {/* Logs Modal */}
-            {webhookLogs && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 max-w-4xl w-full shadow-2xl flex flex-col max-h-[90vh]">
-                        <h3 className="text-xl font-bold mb-4 text-green-400">Logs for: {selectedWebhook}</h3>
-                        <div className="overflow-auto flex-1">
-                            {webhookLogs.length > 0 ? (
-                                <LogTable logs={webhookLogs} />
-                            ) : (
-                                <p className="text-zinc-500 text-center py-8">No logs found matching this webhook name.</p>
-                            )}
-                        </div>
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => { setWebhookLogs(null); setSelectedWebhook(null); }}
-                                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded"
-                            >Close</button>
-                        </div>
-                    </div>
-                </div>
+            {/* Network View Modal */}
+            {selectedNetworkTarget && networkLogs && (
+                <NetworkView
+                    logs={networkLogs}
+                    pagination={{
+                        page: networkPage,
+                        totalPages: networkTotalPages,
+                        totalItems: networkTotalItems,
+                        onNext: () => setNetworkPage(p => Math.min(networkTotalPages, p + 1)),
+                        onPrev: () => setNetworkPage(p => Math.max(1, p - 1))
+                    }}
+                    onClose={() => { setSelectedNetworkTarget(null); setNetworkLogs(null); }}
+                    title={selectedNetworkTarget.name}
+                />
             )}
         </div>
     );

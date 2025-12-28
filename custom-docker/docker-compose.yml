@@ -24,6 +24,7 @@ services:
       - traefik.http.services.jellyfin_webhook.loadbalancer.server.port=5000
       - "traefik.http.routers.jellyfin_webhook.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyfin-webhooks`)"
       - "traefik.http.routers.jellyfin_webhook.tls=true"
+      - traefik.http.routers.jellyfin_webhook.priority=10000
       
       - homepage.group=Utilities
       - homepage.name=Jellyfin Webhooks

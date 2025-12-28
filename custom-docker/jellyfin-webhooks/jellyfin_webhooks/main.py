@@ -2,10 +2,9 @@ import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from jellyfin_webhooks.utils.constants import constants as c
-from jellyfin_webhooks.webhook.add_watched_tag import add_watched_tag
-from jellyfin_webhooks.api.logs import route as logs_route
-from jellyfin_webhooks.api.webhooks import route as webhooks_route
-from jellyfin_webhooks.api.torrents import route as torrents_route
+
+from jellyfin_webhooks import api as api_routes
+from jellyfin_webhooks import webhook as webhook_routes
 
 # Configure Logging
 import logging
@@ -54,11 +53,13 @@ def create_app():
     app.logger.setLevel(logging.INFO if not c.DEBUG_ENVIRONMENT else logging.DEBUG)
 
     # Register API Blueprints
-    app.register_blueprint(add_watched_tag)
-    app.register_blueprint(logs_route)
-    app.register_blueprint(webhooks_route)
+    app.register_blueprint(webhook_routes.playback_stop.route)
+    app.register_blueprint(webhook_routes.stremio_event.route)
     
-    app.register_blueprint(torrents_route)
+    app.register_blueprint(api_routes.logs.route)
+    app.register_blueprint(api_routes.webhooks.route)
+    app.register_blueprint(api_routes.torrents.route)
+    app.register_blueprint(api_routes.requests.route)
 
     # --- SERVE REACT FRONTEND ---
     
@@ -97,4 +98,7 @@ if __name__ == '__main__':
         print("Debugger attached!")
 
     app = create_app()
+    print(f"DEBUG: BASE_URL is '{c.BASE_URL}'")
+    print("DEBUG: Registering Rules:")
+    print(app.url_map)
     app.run(host='0.0.0.0', port=c.PORT, debug=c.DEBUG_ENVIRONMENT) # Important: turn off Flask debug reloader if using debugpy

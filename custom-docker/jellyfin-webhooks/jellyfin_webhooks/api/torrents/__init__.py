@@ -1,10 +1,12 @@
 from flask import Blueprint, jsonify, current_app
 import qbittorrentapi
 from jellyfin_webhooks.utils.constants import constants as c
+from jellyfin_webhooks.utils.decorators import log_request
 
 route = Blueprint('api_torrents', __name__)
 
 @route.route(f'{c.BASE_URL}/api/torrents', methods=['GET'])
+@log_request(category="api", endpoint="torrents")
 def get_torrents():
     try:
         qbt_client = qbittorrentapi.Client(

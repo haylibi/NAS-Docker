@@ -3,6 +3,7 @@ import re
 import logging
 from flask import Blueprint, jsonify, request
 from jellyfin_webhooks.utils.constants import constants as c
+from jellyfin_webhooks.utils.decorators import log_request
 
 route = Blueprint('api_logs', __name__)
 
@@ -19,6 +20,7 @@ def parse_log_line(line):
     return {"time": "Unknown", "level": "INFO", "msg": line}
 
 @route.route(f'{c.BASE_URL}/api/logs')
+@log_request(category="api", endpoint="logs")
 def get_logs():
     page = request.args.get('page', 1, type=int)
     min_level_str = request.args.get('min_level', logging.getLevelName(logging.DEBUG)).upper()
@@ -52,8 +54,9 @@ def get_logs():
 
     total_pages = max(1, (len(all_logs) + per_page - 1) // per_page)
     paginated = all_logs[(page-1)*per_page : page*per_page]
+    total_items = len(all_logs)
 
     return jsonify({
         "data": paginated,
-        "metadata": {"page": page, "total_pages": total_pages}
+        "metadata": {"page": page, "total_pages": total_pages, "total_items": total_items}
     })

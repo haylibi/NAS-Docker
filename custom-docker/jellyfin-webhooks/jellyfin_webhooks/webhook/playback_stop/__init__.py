@@ -1,35 +1,34 @@
 from flask import Blueprint, request, current_app, jsonify
 import qbittorrentapi
 from jellyfin_webhooks.utils.constants import constants as c
+from jellyfin_webhooks.utils.decorators import log_request
 
-add_watched_tag = Blueprint('add_watched_tag', __name__)
+route = Blueprint('playback_stop', __name__)
 
-@add_watched_tag.route(f'{c.BASE_URL}/webhook/add_watched_tag', methods=['POST'])
+@route.route(f'{c.BASE_URL}/webhook/playback_stop', methods=['POST'])
+@log_request(category="webhook", endpoint="playback_stop")
 def main():
     # Always pull fresh settings to check if enabled
-    if not c.settings.get('add_watched_tag', {}).get('enabled'):
+    if not c.settings.get('playback_stop', {}).get('enabled'):
         current_app.logger.info("Received /tagger request but webhook is currently DISABLED.")
         return jsonify({"status": "disabled"}), 200
 
     data = request.json
     dry_run = request.args.get('dry_run', 'false').lower() == 'true' or data.get('dry_run', False)
     
-    # Logic: Only tag if Playback Stop + >90% watched
-    # For dry_run, we process it regardless of events to test connectivity/matching
-    # We use 'or 0' because if the string is empty "", int() would crash.
-    position_ticks = int(data.get('Playback', {}).get('PositionTicks', 0) or 0)
-    total_ticks = int(data.get('Item', {}).get('RunTimeTicks', 0) or 1) # avoid divide by zero
-    
-    # 2. Calculate Percentage
-    played_percentage = (position_ticks / total_ticks) * 100
-
-    should_process = (data.get('NotificationType') == 'PlaybackStop' and played_percentage > 90) or dry_run
+    should_process = (data.get('NotificationType') == 'PlaybackStop' and data.get('PlayedToCompletion', False)) or dry_run
 
     if should_process:
-        media_name = data.get('Item', {}).get('Name', '')
+        media_name = data.get('Name', '')
         
         # If dry_run is True and we have a media_name, it might be a manual test
         log_prefix = "[DRY RUN]" if dry_run else "[LIVE]"
+        
+        # Get played Percentage
+        position_ticks = int(data.get('PlaybackPositionTicks', 0) or 0)
+        total_ticks = int(data.get('RunTimeTicks', 0) or 1) # avoid divide by zero
+        played_percentage = (position_ticks / total_ticks) * 100
+
         current_app.logger.info(f"{log_prefix} Processing watched event for: {media_name} (Watched {int(played_percentage)}%)")
         tagged_torrents = []
         

@@ -12,15 +12,15 @@ class Constants:
     LOG_LEVEL = 0
     SETTINGS_FILE = os.getenv('JELYFIN_WEBHOOKS_SETTINGS_FILE', "/app/data/settings.json")
     DEBUG_ENVIRONMENT = os.getenv('JELLYFIN_WEBHOOK_DEBUG_MODE', 'false').lower() == 'true'
-    BASE_URL = os.getenv('JELLYFIN_WEBHOOK_BASE_URL', '')
+    BASE_URL = os.getenv('JELLYFIN_WEBHOOK_BASE_URL', '').rstrip('/')
 
     # This is your "Source of Truth" in the code
     WEBHOOK_CONFIG = {
-        "add_watched_tag": {
+        "playback_stop": {
             "enabled": True,
             "name": "Jellyfin Watched Tagger",
             "description": "Tags a movie/series episode as `watched` in qBittorrent after it has been watched in Jellyfin.",
-            "endpoint": "/add_watched_tag"
+            "endpoint": "/playback_stop"
         }
     }
 

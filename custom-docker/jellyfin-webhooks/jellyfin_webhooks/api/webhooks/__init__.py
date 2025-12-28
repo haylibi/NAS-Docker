@@ -1,9 +1,11 @@
 from flask import Blueprint, jsonify
 from jellyfin_webhooks.utils.constants import constants as c
+from jellyfin_webhooks.utils.decorators import log_request
 
 route = Blueprint('api_webhooks', __name__)
 
 @route.route(f'{c.BASE_URL}/api/webhooks')
+@log_request(category="api", endpoint="webhooks")
 def get_webhooks():
     # Convert dictionary to list for frontend
     webhooks_list = []
