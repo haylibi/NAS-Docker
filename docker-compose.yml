@@ -18,6 +18,8 @@ services:
       - --entrypoints.web.address=:80
       - --entrypoints.https.address=:443
       - --entrypoints.adguard-secure.address=:3001
+      - --entrypoints.immich-https.address=:2283
+      - --entrypoints.jellyseerr-https.address=:5055
       - --entrypoints.web.http.redirections.entryPoint.to=https
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
       - --entrypoints.web.http.redirections.entrypoint.permanent=true
@@ -29,14 +31,12 @@ services:
       - --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
-
-      # ADD THIS LINE: Define a new entrypoint for Immich
-      - "--entrypoints.immich-https.address=:2283"
     ports:
       - "80:80"
       - "443:443"
-      - "2283:2283"
-      - "3001:3001"
+      - "2283:2283" # Immich
+      - "3001:3001" # Adguard
+      - "5055:5055" # Jellyseerr
     volumes:
       - ${CONFIG_ROOT:-.}/letsencrypt:/letsencrypt
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -160,8 +160,6 @@ services:
     volumes:
       - ${CONFIG_ROOT:-.}/jellyseerr:/app/config
     restart: always
-    ports:
-      - "5055:5055"
     healthcheck:
       test:
         [
@@ -175,14 +173,16 @@ services:
       retries: 10
     labels:
       - traefik.enable=true
-      - traefik.http.routers.jellyseerr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyseerr`)
+      - traefik.http.routers.jellyseerr.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))
       - traefik.http.routers.jellyseerr.tls=true
-      - traefik.http.routers.jellyseerr.tls.certresolver=myresolver
-      - traefik.http.services.jellyseerr.loadbalancer.server.port=5055
+      - traefik.http.routers.jellyseerr.entrypoints=jellyseerr-https
+      - traefik.http.routers.jellyseerr.service=jellyseerr-service
+      - traefik.http.services.jellyseerr-service.loadbalancer.server.port=5055
+
       - homepage.group=Media
       - homepage.name=JellySeerr
       - homepage.icon=jellyseerr.png
-      - homepage.href=http://${HOSTNAME}:5055
+      - homepage.href=https://${TAILSCALE_HOSTNAME}:5055
       - homepage.description=Content Recommendations and Request Management
       - homepage.weight=3
       - homepage.widget.type=jellyseerr
