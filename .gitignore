@@ -40,3 +40,5 @@ teslamate/backups/teslamate.bck.2
 custom-docker/jellyfin-webhooks/data/settings.json
 .gitignore
 custom-docker/jellyfin-webhooks/data/app.log
+**.bak
+custom-docker/jellyfin-webhooks/data/*
