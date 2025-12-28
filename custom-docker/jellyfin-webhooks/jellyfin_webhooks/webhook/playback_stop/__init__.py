@@ -1,7 +1,10 @@
-from flask import Blueprint, request, current_app, jsonify
 import qbittorrentapi
+from flask import Blueprint, request, current_app, jsonify
 from jellyfin_webhooks.utils.constants import constants as c
 from jellyfin_webhooks.utils.decorators import log_request
+from jellyfin_webhooks.components.series import Series
+from jellyfin_webhooks.components.movie import Movie
+
 
 route = Blueprint('playback_stop', __name__)
 
@@ -18,56 +21,87 @@ def main():
     
     should_process = (data.get('NotificationType') == 'PlaybackStop' and data.get('PlayedToCompletion', False)) or dry_run
 
-    if should_process:
-        media_name = data.get('Name', '')
-        
-        # If dry_run is True and we have a media_name, it might be a manual test
-        log_prefix = "[DRY RUN]" if dry_run else "[LIVE]"
-        
-        # Get played Percentage
-        position_ticks = int(data.get('PlaybackPositionTicks', 0) or 0)
-        total_ticks = int(data.get('RunTimeTicks', 0) or 1) # avoid divide by zero
-        played_percentage = (position_ticks / total_ticks) * 100
+    if not should_process:
+        return jsonify({"status": "ignored", "reason": "Not a watched event"}), 200
 
-        current_app.logger.info(f"{log_prefix} Processing watched event for: {media_name} (Watched {int(played_percentage)}%)")
-        tagged_torrents = []
-        
-        try:
-            qbt_client = qbittorrentapi.Client(
-                host=c.QBT_HOST, 
-                username=c.QBT_USER, 
-                password=c.QBT_PASS
-            )
-            qbt_client.auth_log_in()
-            
-            torrents = qbt_client.torrents_info()
-            found = False
-            for torrent in torrents:
-                # TODO: Find a better way to match `media` to `torrent`
-                #   More specifically, when we download a ENTIRE season, we should only
-                #   Change the name to `watched` once `ep` == `last`
-                if media_name.lower() in torrent.name.lower():
-                    if not dry_run:
-                        torrent.add_tags(tags='watched')
-                        current_app.logger.info(f"SUCCESS: Tagged {torrent.name} as 'watched'")
-                    else:
-                        current_app.logger.info(f"DRY RUN: Found match {torrent.name}")
-                    
-                    tagged_torrents.append(torrent.name)
-                    found = True
-            
-            if not found:
-                current_app.logger.warning(f"No torrent found matching name: {media_name}")
-                
-            return jsonify({
-                "status": "success",
-                "dry_run": dry_run,
-                "tagged_torrents": tagged_torrents,
-                "match_found": found
-            }), 200
-                
-        except Exception as e:
-            current_app.logger.error(f"Error connecting to qBittorrent: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
+    torrent_file_path = None
+    last_ep_torrent_file_path = None
+    if data.get('ItemType') == 'Episode':
+        season = Series(
+            name=data.get('SeriesName'),
+            base_dir = f'/data/media/series/{data.get("SeriesName")}'
+        )[int(data.get('SeasonNumber'))]
+        torrent_file_path = season[data.get('EpisodeNumber')].get_torrent_path()
+        assert torrent_file_path is not None, 'Could not proceed with request. Server was unable to find torrent file corresponding to Episode'
 
-    return jsonify({"status": "ignored", "reason": "Not a watched event"}), 200
+        # Must verify if Episode is part of a `Series Pack`. 
+        #   This is done by checking all episodes, and comparing the torrent file path of the latest episode
+        #   With the torrents (if both `watched` ep and `last` ep have similar root (base-dir), they're a season pack)
+        last_ep_torrent_file_path = season[-1].get_torrent_path()
+        if last_ep_torrent_file_path == torrent_file_path:
+            last_ep_torrent_file_path = None    # If `watched` == `last_ep`, then proceed normally (so tag torrent as watched either way)
+    else:
+        movie = Movie(
+            name=data.get('Name'),
+            base_dir = f'/data/media/movies/{data.get("Name")} ({data.get("PremiereDate").split("-")[0]})'.replace(':', ' -')
+        )
+        torrent_file_path = movie.get_torrent_path()
+    
+    assert torrent_file_path is not None, 'Cannot proceed with torrent_file_path as None'
+
+    # If dry_run is True and we have a media_name, it might be a manual test
+    log_prefix = "[DRY RUN]" if dry_run else "[LIVE]"
+    
+    # Get played Percentage
+    position_ticks = int(data.get('PlaybackPositionTicks', 0) or 0)
+    total_ticks = int(data.get('RunTimeTicks', 0) or 1) # avoid divide by zero
+    played_percentage = (position_ticks / total_ticks) * 100
+
+    current_app.logger.info(f"{log_prefix} Processing watched event for: {data.get('Name', '')} (Watched {int(played_percentage)}%)")
+    tagged_torrents = []
+    
+    try:
+        qbt_client = qbittorrentapi.Client(
+            host=c.QBT_HOST, 
+            username=c.QBT_USER, 
+            password=c.QBT_PASS
+        )
+        qbt_client.auth_log_in()
+        
+        torrents = qbt_client.torrents_info()
+        found = False
+        message = ''
+        for torrent in torrents:
+            if torrent.content_path.lower() not in torrent_file_path.as_posix().lower():
+                continue
+
+            # Check if torrent path is also root of `last_ep`
+            if last_ep_torrent_file_path and torrent.content_path.lower() in last_ep_torrent_file_path.as_posix().lower():
+                found = True
+                message = 'Episode is part of a Series Pack, can only tag as watched on series last episode.'
+                break
+                
+            # Check if they match, otherwise
+            if not dry_run:
+                torrent.add_tags(tags='watched')
+                current_app.logger.info(f"SUCCESS: Tagged {torrent.name} as 'watched'")
+            else:
+                current_app.logger.info(f"DRY RUN: Found match {torrent.name}")
+            
+            tagged_torrents.append(torrent.name)
+            found = True
+        
+        if not found:
+            current_app.logger.warning(f"No torrent found matching name: {data.get('Name', '')}")
+            
+        return jsonify({
+            "status": "success",
+            "dry_run": dry_run,
+            "tagged_torrents": tagged_torrents,
+            "match_found": found,
+            "message": message
+        }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error connecting to qBittorrent: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500

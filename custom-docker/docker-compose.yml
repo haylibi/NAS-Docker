@@ -11,13 +11,13 @@ services:
       - LOG_LEVEL=INFO
       - JELLYFIN_WEBHOOK_DEBUG_MODE=false
       - JELLYFIN_WEBHOOK_BASE_URL=/jellyfin-webhooks/
-    ports:
-      - "5000:5000"
+      - TORRENTS_DATA_ROOT=/data/torrents
     depends_on:
       - gluetun
     volumes:
       - ./custom-docker/jellyfin-webhooks/data:/app/data # Map internal files to your host
       - ./custom-docker/jellyfin-webhooks/jellyfin_webhooks:/app/jellyfin_webhooks
+      - ${DATA_ROOT}:/data
     
     labels:
       - traefik.enable=true

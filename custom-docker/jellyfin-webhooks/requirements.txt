@@ -2,3 +2,5 @@ flask
 flask-cors
 qbittorrent-api
 debugpy
+beautifulsoup4
+lxml

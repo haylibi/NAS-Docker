@@ -13,6 +13,8 @@ class Constants:
     SETTINGS_FILE = os.getenv('JELYFIN_WEBHOOKS_SETTINGS_FILE', "/app/data/settings.json")
     DEBUG_ENVIRONMENT = os.getenv('JELLYFIN_WEBHOOK_DEBUG_MODE', 'false').lower() == 'true'
     BASE_URL = os.getenv('JELLYFIN_WEBHOOK_BASE_URL', '').rstrip('/')
+    NON_VIDEO_FILE_FORMATS = ['jpg', 'metathumb', 'nfo', 'jpg', 'xml'] 
+    TORRENTS_DATA_ROOT = os.getenv('TORRENTS_DATA_ROOT')
 
     # This is your "Source of Truth" in the code
     WEBHOOK_CONFIG = {
