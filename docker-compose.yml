@@ -1,4 +1,7 @@
 services:
+  
+# --- Traefik ---
+  # Reverse proxy
   traefik:
     image: ghcr.io/traefik/traefik:3.6
     container_name: traefik
@@ -14,6 +17,7 @@ services:
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.https.address=:443
+      - --entrypoints.adguard-secure.address=:3001
       - --entrypoints.web.http.redirections.entryPoint.to=https
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
       - --entrypoints.web.http.redirections.entrypoint.permanent=true
@@ -32,6 +36,7 @@ services:
       - "80:80"
       - "443:443"
       - "2283:2283"
+      - "3001:3001"
     volumes:
       - ${CONFIG_ROOT:-.}/letsencrypt:/letsencrypt
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -42,6 +47,9 @@ services:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 1m
       retries: 10
+  
+# --- Sonarr ---
+  # PVR for newsgroup and bittorrent users
   sonarr:
     image: lscr.io/linuxserver/sonarr
     container_name: sonarr
@@ -74,6 +82,9 @@ services:
       - homepage.widget.type=sonarr
       - homepage.widget.url=http://sonarr:8989/sonarr
       - homepage.widget.key=${SONARR_API_KEY}
+  
+# --- Radarr ---
+  # Movie collection manager for Usenet and BitTorrent users
   radarr:
     image: lscr.io/linuxserver/radarr
     container_name: radarr
@@ -104,6 +115,9 @@ services:
       - homepage.widget.type=radarr
       - homepage.widget.url=http://radarr:7878/radarr
       - homepage.widget.key=${RADARR_API_KEY}
+  
+# --- Bazarr ---
+  # Companion application to Sonarr and Radarr that manages and downloads subtitles
   bazarr:
     image: lscr.io/linuxserver/bazarr
     container_name: bazarr
@@ -134,6 +148,9 @@ services:
       - homepage.widget.type=bazarr
       - homepage.widget.url=http://bazarr:6767/bazarr
       - homepage.widget.key=${BAZARR_API_KEY}
+  
+# --- JellySeerr ---
+  # Manages requests for your media library
   jellyseerr:
     image: ghcr.io/fallenbagel/jellyseerr:latest
     container_name: jellyseerr
@@ -171,6 +188,9 @@ services:
       - homepage.widget.type=jellyseerr
       - homepage.widget.url=http://jellyseerr:5055
       - homepage.widget.key=${JELLYSEERR_API_KEY}
+  
+# --- Prowlarr ---
+  # Indexer aggregator for Sonarr and Radarr
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
@@ -200,22 +220,11 @@ services:
       - homepage.widget.type=prowlarr
       - homepage.widget.url=http://prowlarr:9696/prowlarr
       - homepage.widget.key=${PROWLARR_API_KEY}
-  flaresolverr:
-    image: 21hsmw/flaresolverr:nodriver
-    container_name: flaresolverr
-    restart: always
-    environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_HTML=${LOG_HTML:-false}
-      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
-      - TZ=${TIMEZONE}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.flaresolverr.rule=PathPrefix(`/flaresolverr`)
-      - traefik.http.routers.flaresolverr.tls=true
-      - traefik.http.services.flaresolverr.loadbalancer.server.port=8191
-    profiles:
-      - flaresolverr
+
+# --- qBittorrent ---
+  # Bittorrent client with a complete web UI
+  # Uses VPN network
+  # Using Libtorrent 1.x
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:libtorrentv1
     container_name: qbittorrent
@@ -255,9 +264,14 @@ services:
       - homepage.widget.username=${QBITTORRENT_USERNAME}
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
 
+# --- qBit Manage ---
+  # Manager of qBittorrent instance
   qbit_manage:
     container_name: qbit_manage
-    image: ghcr.io/stuffanthings/qbit_manage:latest
+    # image: ghcr.io/stuffanthings/qbit_manage:latest
+    image: qbit_manage:local-fix
+    build:
+      context: /home/yaki/projects/qbit_manage
     restart: unless-stopped
     environment:
       - TZ=${TIMEZONE}
@@ -284,7 +298,9 @@ services:
       - homepage.description=Bittorrent client
       - homepage.weight=2
 
-
+# --- Unpackerr ---
+  # Automated Archive Extractions
+  #   (Extracts ZIPs onto files)
   unpackerr:
     image: ghcr.io/unpackerr/unpackerr:latest
     container_name: unpackerr
@@ -300,19 +316,9 @@ services:
       - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
     security_opt:
       - no-new-privileges:true
-  cleanuparr:
-    image: ghcr.io/cleanuparr/cleanuparr:latest
-    container_name: cleanuparr
-    restart: always
-    volumes:
-      - ${CONFIG_ROOT:-.}/cleanuparr/logs:/var/logs
-      - ${CONFIG_ROOT:-.}/cleanuparr/ignored.txt:/usr/ignored.txt
-      - ${CONFIG_ROOT:-.}/cleanuparr/blacklist.json:/usr/blacklist.json
-      - ${CONFIG_ROOT:-.}/cleanuparr:/config
-    environment:
-      - TZ=${TIMEZONE}
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
+  
+# --- Jellyfin ---
+  # Media server designed to organize, manage, and share digital media files to networked devices
   jellyfin:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
@@ -327,7 +333,6 @@ services:
     ports:
       - "7359:7359/udp"
       - "1900:1900/udp"
-      - "8096:8096"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8096/jellyfin/health"]
@@ -348,6 +353,9 @@ services:
       - homepage.widget.type=jellyfin
       - homepage.widget.url=http://jellyfin:8096/jellyfin
       - homepage.widget.key=${JELLYFIN_API_KEY}
+
+# --- Decluttarr ---
+  # Keeps *arr queue free of stalled and redundant downloads
   decluttarr:
     image: ghcr.io/manimatter/decluttarr:latest
     container_name: decluttarr
@@ -385,6 +393,8 @@ services:
     profiles:
       - decluttarr
   
+# --- Homepage ---
+  # Application dashboard
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
@@ -412,6 +422,8 @@ services:
       - traefik.http.routers.homepage.tls=true
       - traefik.http.services.homepage.loadbalancer.server.port=3000
   
+# --- WatchTower ---
+  # Automated Docker images update
   watchtower:
     image: ghcr.io/nicholas-fedor/watchtower:latest
     container_name: watchtower
@@ -420,6 +432,9 @@ services:
       - WATCHTOWER_CLEANUP=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+# --- AUTO HEAL ---
+  # Monitor and restart unhealthy Docker containers
   autoheal:
     image: willfarrell/autoheal:latest
     container_name: autoheal
@@ -428,6 +443,9 @@ services:
       - AUTOHEAL_CONTAINER_LABEL=all
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+# --- Glances ---
+  # Real-time system monitoring through web UI
   glances:
       image: nicolargo/glances:latest-full
       container_name: glances
@@ -472,7 +490,8 @@ services:
         - homepage.widget.url=http://glances:61208
         - homepage.widget.metric=info
   
-  # 1. THE VPN CONTAINER (Gluetun)
+# --- Gluetun ---
+  # Lightweight swiss-army-knife-like VPN client to multiple VPN service providers
   gluetun:
     image: qmcgaw/gluetun
     container_name: gluetun
@@ -516,7 +535,8 @@ services:
       - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.replacement=$$1/
       - traefik.http.middlewares.qbittorrent-strip-slash.redirectregex.permanent=false
 
-# --- FILEBROWSER ---
+# --- FileBrowser ---
+  # File managing interface within a specified directory and it can be used to upload, delete, preview and edit your files.
   filebrowser:
     image: filebrowser/filebrowser:latest
     container_name: filebrowser
@@ -525,6 +545,7 @@ services:
       # Point to where you moved the files in Phase 1
       - ./filebrowser/my-data:/srv
       - ./filebrowser/filebrowser.db:/database/filebrowser.db
+      - ./filebrowser/settings.json:/config/settings.json
     environment:
       - FB_BASEURL=/filebrowser
     labels:
@@ -546,8 +567,8 @@ services:
       - homepage.widget.authHeader=X-My-Header # If using Proxy header authentication
 
 # --- Autobrr ---
-# Ratio builder for torrent
-#   (fetches torrents as soon as they're published and seeds it to "farm" free ratio)
+  # Ratio builder for torrent
+  #   (fetches torrents as soon as they're published and seeds it to "farm" free ratio)
   autobrr:
     container_name: autobrr
     image: ghcr.io/autobrr/autobrr:latest
@@ -584,9 +605,12 @@ services:
       - homepage.href=/autobrr
       - homepage.description=Ratio Builder
 
+# --- Teslamate ---
+  # A powerful, self-hosted data logger for your Tesla.
 
-
-# --- TESLAMATE ---
+ # --- Teslamate App
+  # Deals with API Requests to Tesla
+  # Accessible through `http://thinkpadserver:4000/`
   teslamate:
     image: teslamate/teslamate:latest
     restart: always
@@ -636,6 +660,8 @@ services:
     cap_drop:
       - all
 
+ # PostgreDB
+  # Database storing Teslamate data
   teslamate-db:
     image: postgres:17
     restart: always
@@ -646,6 +672,8 @@ services:
     volumes:
       - teslamate-db:/var/lib/postgresql/data
 
+ # Grafana
+  # Visualization service through GRAFANA Dashboard
   teslamate-grafana:
     image: teslamate/grafana:latest
     restart: always
@@ -671,6 +699,9 @@ services:
       # 👇 This connects to the "adopted" volume below
       - teslamate-grafana-data:/var/lib/grafana
 
+ # MQTT
+  # `publish-subscribe` network queue protocal
+  # API results are published here which are then loaded onto the Database
   teslamate-mqtt:
     image: eclipse-mosquitto:2
     restart: always
@@ -680,6 +711,9 @@ services:
       - mosquitto-conf:/mosquitto/config
       - mosquitto-data:/mosquitto/data
 
+ # TeslamateAPI
+  # Creates endpoints to query statistics
+  # Endpoint -> `http://teslamateapi:8080/api/v1/<path>`
   teslamateapi:
     image: tobiasehlert/teslamateapi:latest
     restart: always
@@ -700,8 +734,10 @@ services:
 
 
 # --- IMMICH ---
+ # Immich
+  # Main application
   immich-server:
-    container_name: immich_server
+    container_name: immich-server
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
     command: [ "start.sh", "immich" ]
     volumes:
@@ -752,10 +788,9 @@ services:
       - homepage.widget.url=http://immich-server:2283
       - homepage.widget.key=${IMMICH_API_KEY}
       - homepage.widget.version=2
-      - homepage.container=immich_server
-      - homepage.server=my-docker
 
-
+ # Machine Learning
+  # Module with machine learning (photo search etc)
   immich-machine-learning:
     container_name: immich_machine_learning
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
@@ -770,13 +805,17 @@ services:
       - REDIS_HOSTNAME=immich-redis
     restart: always
 
+ # Redis (NoSQL)
+  # NoSQL Database for Immich
   immich-redis:
     container_name: immich_redis
     image: docker.io/valkey/valkey:8
     restart: always
     healthcheck:
       test: redis-cli ping || exit 1
-
+ 
+ # PostgreSQL
+  # SQL Database for Immich
   immich-postgres:
     container_name: immich_postgres
     image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
@@ -790,8 +829,6 @@ services:
       - ${IMMICH_DB_DATA_LOCATION}:/var/lib/postgresql/data
     restart: always
     shm_size: 128mb
-
-
 
 
 volumes:
