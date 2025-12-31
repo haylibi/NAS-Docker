@@ -662,10 +662,15 @@ services:
 
       # --- 1. THE MAIN TESLAMATE SERVICE (Port 4000) ---
       # This handles traffic that actually arrives on port 4000
+        # --- HTTPS
       - "traefik.http.routers.teslamate-secure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
       - "traefik.http.routers.teslamate-secure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
       - "traefik.http.routers.teslamate-secure.tls=true"
-      - traefik.http.routers.teslamate-secure.service=teslamate-service
+        # --- HTTP
+      - "traefik.http.routers.teslamate-insecure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
+      - "traefik.http.routers.teslamate-insecure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
+      - "traefik.http.routers.teslamate-insecure.tls=false"
+      - traefik.http.routers.teslamate-insecure.service=teslamate-service
 
       # Service definition (points to internal container port 4000)
       - traefik.http.services.teslamate-service.loadbalancer.server.port=4000
