@@ -51,10 +51,23 @@ services:
       - "traefik.http.routers.adguardhome.tls=true"
       - "traefik.http.routers.adguardhome.entrypoints=adguard-secure"
   
+     # --- NEW REDIRECT ROUTER (Port 443 -> 3001) ---
+      - "traefik.http.routers.adguard-redirect.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/adguard`)"
+      - "traefik.http.routers.adguard-redirect.entrypoints=https"
+      - "traefik.http.routers.adguard-redirect.tls=true"
+      - "traefik.http.routers.adguard-redirect.middlewares=adguard-port-redirect"
+      - "traefik.http.routers.adguard-redirect.service=noop@internal"
+
+      # --- REDIRECT MIDDLEWARE ---
+      # Redirects to HTTP on Port 3001
+      - "traefik.http.middlewares.adguard-port-redirect.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/adguard"
+      - "traefik.http.middlewares.adguard-port-redirect.redirectregex.replacement=https://$$1:3001"
+
+      # --- HOMEPAGE ---
       - homepage.group=Utilities
       - homepage.name=Adguard
       - homepage.icon=adguard-home.png
-      - homepage.href=https://${TAILSCALE_HOSTNAME}:3001
+      - homepage.href=/adguard
       - homepage.description=DNS Adblocker
       - homepage.weight=0
       - homepage.widget.type=adguard

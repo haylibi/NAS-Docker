@@ -19,6 +19,7 @@ services:
       - --entrypoints.https.address=:443
       - --entrypoints.adguard-secure.address=:3001
       - --entrypoints.immich-https.address=:2283
+      - --entrypoints.teslamate-http.address=:4000
       - --entrypoints.jellyseerr-https.address=:5055
       - --entrypoints.web.http.redirections.entryPoint.to=https
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
@@ -37,6 +38,7 @@ services:
       - "2283:2283" # Immich
       - "3001:3001" # Adguard
       - "5055:5055" # Jellyseerr
+      - "4000:4000" # Teslamate
     volumes:
       - ${CONFIG_ROOT:-.}/letsencrypt:/letsencrypt
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -179,11 +181,25 @@ services:
       - traefik.http.routers.jellyseerr.service=jellyseerr-service
       - traefik.http.services.jellyseerr-service.loadbalancer.server.port=5055
 
+      # --- 2. NEW REDIRECT ROUTER (Port 443 -> 5055) ---
+      # Catches /jellyseerr on the standard HTTPS port
+      - "traefik.http.routers.jellyseerr-redirect.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/jellyseerr`)"
+      - "traefik.http.routers.jellyseerr-redirect.entrypoints=https"
+      - "traefik.http.routers.jellyseerr-redirect.tls=true"
+      - "traefik.http.routers.jellyseerr-redirect.middlewares=jellyseerr-port-redirect"
+      - "traefik.http.routers.jellyseerr-redirect.service=noop@internal"
+
+      # --- 3. REDIRECT MIDDLEWARE ---
+      # Swaps port to 5055
+      - "traefik.http.middlewares.jellyseerr-port-redirect.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/jellyseerr"
+      - "traefik.http.middlewares.jellyseerr-port-redirect.redirectregex.replacement=https://$$1:5055"
+
+      # --- HOMEPAGE ---
       - homepage.group=Media
       - homepage.name=JellySeerr
       - homepage.icon=jellyseerr.png
-      - homepage.href=https://${TAILSCALE_HOSTNAME}:5055
-      - homepage.description=Content Recommendations and Request Management
+      - homepage.href=/jellyseerr
+      - homepage.description=Content Recommendations
       - homepage.weight=3
       - homepage.widget.type=jellyseerr
       - homepage.widget.url=http://jellyseerr:5055
@@ -634,9 +650,6 @@ services:
   teslamate:
     image: teslamate/teslamate:latest
     restart: always
-    # 1. Open the port directly to your network
-    ports:
-      - "4000:4000"
     environment:
       - ENCRYPTION_KEY=${TESLAMATE_ENCRYPTION_KEY}
       - DATABASE_USER=teslamate
@@ -645,12 +658,37 @@ services:
       - DATABASE_HOST=teslamate-db
       - MQTT_HOST=teslamate-mqtt
     labels:
-      # Disable Traefik for the main web interface (it cannot handle the subpath)
-      - traefik.enable=false
+      - traefik.enable=true
+
+      # --- 1. THE MAIN TESLAMATE SERVICE (Port 4000) ---
+      # This handles traffic that actually arrives on port 4000
+      - "traefik.http.routers.teslamate-secure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
+      - "traefik.http.routers.teslamate-secure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
+      - "traefik.http.routers.teslamate-secure.tls=false"
+      - traefik.http.routers.teslamate-secure.service=teslamate-service
+
+      # Service definition (points to internal container port 4000)
+      - traefik.http.services.teslamate-service.loadbalancer.server.port=4000
+
+      # --- 2. THE REDIRECT LOGIC (Port 443 -> 4000) ---
+      # A. Middleware: Regex to swap the port
+      # Catches "https://domain/teslamate" and redirects to "http://domain:4000"
+      # Note: We use '$$1' to escape the $ sign in docker-compose
+      - "traefik.http.middlewares.redirect-to-teslamate-port.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/teslamate"
+      - "traefik.http.middlewares.redirect-to-teslamate-port.redirectregex.replacement=http://$$1:4000"
+
+      # B. Router: Listens on standard HTTPS (443) for the path /teslamate
+      - "traefik.http.routers.teslamate-redirector.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/teslamate`)"
+      - "traefik.http.routers.teslamate-redirector.entrypoints=https"
+      - "traefik.http.routers.teslamate-redirector.tls=true"
+      - "traefik.http.routers.teslamate-redirector.middlewares=redirect-to-teslamate-port"
+      # 'noop@internal' means "don't send this traffic to a container, just run the middleware"
+      - "traefik.http.routers.teslamate-redirector.service=noop@internal"
+
       # Homepage config
       - homepage.group=Home Server
       - homepage.name=TeslaMate
-      - homepage.href=http://${HOSTNAME}:4000
+      - homepage.href=/teslamate
       - homepage.icon=teslamate.png
       # Homepage - Widget config
       - homepage.widget.type=customapi
