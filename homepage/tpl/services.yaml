@@ -32,7 +32,6 @@
             metric: process
             version: 4                  # Added version 4
     - Network:
-        href: http://thinkpadserver:61208
         icon: glances.png
         widget:
             type: glances
@@ -45,18 +44,15 @@
 - Home Server:
     - FritzBox:
         icon: fritzbox.png
-        href: http://192.37.73.1
+        href: http://fritz.box/
         widget:
             type: fritzbox
-            url: http://192.37.73.1
+            url: http://fritz.box/
     - StirlingPDF:
         icon: stirlingpdf.png
-        href: http://thinkpadserver:8080
+        href: ${STIRLING_PDF_URL}
         description: StirlingPDF
     - Immich Tools:
         icon: immich.png
-        href: http://thinkpadserver:8001
+        href: ${IMMICH_POWERTOOLS_URL}
         description: PowerTools for Immich
-    - StoryBook:
-        href: http://thinkpadserver:609
-        description: Story Book - Build your own stories

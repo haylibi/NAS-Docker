@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Configuration ---
-BACKUP_DIR="/home/yaki/dockers/teslamate/backups"
+BACKUP_DIR="~/dockers/teslamate/backups"
 DB_CONTAINER="teslamate-database-1"
 GF_CONTAINER="teslamate-grafana-1"
 

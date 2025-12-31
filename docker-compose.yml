@@ -562,8 +562,8 @@ services:
       - homepage.description=Web File Manager
       - homepage.widget.type=filebrowser
       - homepage.widget.url=http://filebrowser:80
-      - homepage.widget.username=admin
-      - homepage.widget.password=PEK2fYWbCN3_gBSL # Update this   
+      - homepage.widget.username=${FILEBROWSER_USERNAME}
+      - homepage.widget.password=${FILEBROWSER_PASSWORD} # Update this   
       - homepage.widget.authHeader=X-My-Header # If using Proxy header authentication
 
 # --- Autobrr
