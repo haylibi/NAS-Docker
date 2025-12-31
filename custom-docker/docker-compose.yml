@@ -29,5 +29,5 @@ services:
       - homepage.group=Utilities
       - homepage.name=Jellyfin Webhooks
       - homepage.icon=jellyfin.png
-      - homepage.href=https://${TAILSCALE_HOSTNAME}/jellyfin-webhooks/
+      - homepage.href=/jellyfin-webhooks/
       - homepage.description=Webhook UI for Jellyfin

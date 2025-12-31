@@ -298,6 +298,25 @@ services:
       - homepage.description=Bittorrent client
       - homepage.weight=2
 
+# --- FlareResolver
+  # Proxy server to bypass Cloudflare protection in Prowlarr
+  flaresolverr:
+    image: 21hsmw/flaresolverr:nodriver
+    container_name: flaresolverr
+    restart: always
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TIMEZONE}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.flaresolverr.rule=PathPrefix(`/flaresolverr`)
+      - traefik.http.routers.flaresolverr.tls=true
+      - traefik.http.services.flaresolverr.loadbalancer.server.port=8191
+    profiles:
+      - flaresolverr
+
 # --- Unpackerr
   # Automated Archive Extractions
   #   (Extracts ZIPs onto files)
@@ -333,6 +352,7 @@ services:
     ports:
       - "7359:7359/udp"
       - "1900:1900/udp"
+      - "8096:8096"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8096/jellyfin/health"]
@@ -653,8 +673,6 @@ services:
       - homepage.widget.mappings.3.field=data.status.odometer
       - homepage.widget.mappings.3.format=number
       - homepage.widget.mappings.3.suffix=km
-
-
     volumes:
       - ./teslamate/import:/opt/app/import
     cap_drop:
@@ -758,30 +776,36 @@ services:
     labels:
       - traefik.enable=true
       
-      # --- 1. THE HTTPS ROUTER ---
+      # --- 1. THE MAIN IMMICH SERVICE (Port 2283) ---
+      # This handles traffic that actually arrives on port 2283
       - traefik.http.routers.immich-secure.rule=Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)
       - traefik.http.routers.immich-secure.entrypoints=immich-https
       - traefik.http.routers.immich-secure.tls=true
       - traefik.http.routers.immich-secure.service=immich-service
-
-      # --- 2. THE HTTP ROUTER (The one that redirects) ---
-      - traefik.http.routers.immich-http.rule=Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)
-      - traefik.http.routers.immich-http.entrypoints=immich-https
-      - traefik.http.routers.immich-http.middlewares=immich-port-redirect
-
-      # --- 3. THE REDIRECT MIDDLEWARE (Regex) ---
-      # This captures the request and replaces http with https while keeping the rest (port included)
-      - traefik.http.middlewares.immich-port-redirect.redirectregex.regex=^http://(.*)
-      - traefik.http.middlewares.immich-port-redirect.redirectregex.replacement=https://$$1
-      - traefik.http.middlewares.immich-port-redirect.redirectregex.permanent=false
-
-      # Internal port for Immich is still 2283
-      - traefik.http.services.immich-service.loadbalancer.server.port=2283
       
+      # Service definition (points to internal container port 2283)
+      - traefik.http.services.immich-service.loadbalancer.server.port=2283
+
+      # --- 2. THE REDIRECT LOGIC (Port 443 -> 2283) ---
+      # A. Middleware: Regex to swap the port
+      # Catches "https://domain/immich" and redirects to "https://domain:2283"
+      # Note: We use '$$1' to escape the $ sign in docker-compose
+      - "traefik.http.middlewares.redirect-to-immich-port.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/immich"
+      - "traefik.http.middlewares.redirect-to-immich-port.redirectregex.replacement=https://$$1:2283"
+      
+      # B. Router: Listens on standard HTTPS (443) for the path /immich
+      - "traefik.http.routers.immich-redirector.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/immich`)"
+      - "traefik.http.routers.immich-redirector.entrypoints=https"
+      - "traefik.http.routers.immich-redirector.tls=true"
+      - "traefik.http.routers.immich-redirector.middlewares=redirect-to-immich-port"
+      # 'noop@internal' means "don't send this traffic to a container, just run the middleware"
+      - "traefik.http.routers.immich-redirector.service=noop@internal"
+
+      # --- HOMEPAGE CONFIG ---
       - homepage.group=Media
       - homepage.name=Immich
       - homepage.icon=immich.png
-      - homepage.href=https://${TAILSCALE_HOSTNAME}:2283
+      - homepage.href=/immich 
       - homepage.description=Photos Backup
       - homepage.widget.type=immich
       - homepage.widget.url=http://immich-server:2283
