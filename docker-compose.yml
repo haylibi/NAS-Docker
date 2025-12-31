@@ -664,7 +664,7 @@ services:
       # This handles traffic that actually arrives on port 4000
       - "traefik.http.routers.teslamate-secure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
       - "traefik.http.routers.teslamate-secure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
-      - "traefik.http.routers.teslamate-secure.tls=false"
+      - "traefik.http.routers.teslamate-secure.tls=true"
       - traefik.http.routers.teslamate-secure.service=teslamate-service
 
       # Service definition (points to internal container port 4000)
@@ -675,7 +675,7 @@ services:
       # Catches "https://domain/teslamate" and redirects to "http://domain:4000"
       # Note: We use '$$1' to escape the $ sign in docker-compose
       - "traefik.http.middlewares.redirect-to-teslamate-port.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/teslamate"
-      - "traefik.http.middlewares.redirect-to-teslamate-port.redirectregex.replacement=http://$$1:4000"
+      - "traefik.http.middlewares.redirect-to-teslamate-port.redirectregex.replacement=https://$$1:4000"
 
       # B. Router: Listens on standard HTTPS (443) for the path /teslamate
       - "traefik.http.routers.teslamate-redirector.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/teslamate`)"
