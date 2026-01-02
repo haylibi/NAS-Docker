@@ -19,7 +19,8 @@ services:
       - --entrypoints.https.address=:443
       - --entrypoints.adguard-secure.address=:3001
       - --entrypoints.immich-https.address=:2283
-      - --entrypoints.teslamate-http.address=:4000
+      - --entrypoints.immich-power-tools-https.address=:2284
+      - --entrypoints.teslamate-entrypoint.address=:4000
       - --entrypoints.jellyseerr-https.address=:5055
       - --entrypoints.web.http.redirections.entryPoint.to=https
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
@@ -36,6 +37,7 @@ services:
       - "80:80"
       - "443:443"
       - "2283:2283" # Immich
+      - "2284:2284" # Immich
       - "3001:3001" # Adguard
       - "5055:5055" # Jellyseerr
       - "4000:4000" # Teslamate
@@ -431,6 +433,7 @@ services:
 
 # --- Homepage
   # Application dashboard
+  # Icons URL -> https://github.com/homarr-labs/dashboard-icons/tree/main
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
@@ -664,11 +667,11 @@ services:
       # This handles traffic that actually arrives on port 4000
         # --- HTTPS
       - "traefik.http.routers.teslamate-secure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
-      - "traefik.http.routers.teslamate-secure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
+      - "traefik.http.routers.teslamate-secure.entrypoints=teslamate-entrypoint" # teslamate-entrypoint --> Listens on port 4000
       - "traefik.http.routers.teslamate-secure.tls=true"
         # --- HTTP
       - "traefik.http.routers.teslamate-insecure.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`))"
-      - "traefik.http.routers.teslamate-insecure.entrypoints=teslamate-http" # teslamate-http --> Listens on port 4000
+      - "traefik.http.routers.teslamate-insecure.entrypoints=teslamate-entrypoint" # teslamate-entrypoint --> Listens on port 4000
       - "traefik.http.routers.teslamate-insecure.tls=false"
       - traefik.http.routers.teslamate-insecure.service=teslamate-service
 
@@ -808,10 +811,11 @@ services:
       - DB_USERNAME=${IMMICH_DB_USERNAME}
       - DB_PASSWORD=${IMMICH_DB_PASSWORD}
       - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME}
-      - REDIS_HOSTNAME=immich-redis
-      - DB_PORT=5432
-      - REDIS_PORT=6379
-      - IMMICH_EXTERNAL_DOMAIN=https://${TAILSCALE_HOSTNAME}/photos
+      - REDIS_HOSTNAME=${IMMICH_REDIS_HOSTNAME}
+      - DB_PORT=${IMMICH_DB_PORT}
+      - DB_HOST=${IMMICH_DB_HOST}
+      - REDIS_PORT=${IMMICH_REDIS_PORT}
+      - IMMICH_EXTERNAL_DOMAIN=https://${TAILSCALE_HOSTNAME}:2283/photos
     depends_on:
       - immich-redis
       - immich-postgres
@@ -896,6 +900,91 @@ services:
     restart: always
     shm_size: 128mb
 
+ # PowerTools
+  immich-power-tools:
+    container_name: immich-power-tools
+    image: ghcr.io/varun-raj/immich-power-tools:latest
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=${IMMICH_DB_USERNAME}
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=${IMMICH_DB_DATABASE_NAME}
+      - DB_PORT=${IMMICH_DB_PORT}
+      - DB_HOST=${IMMICH_DB_HOST}
+      - REDIS_HOSTNAME=${IMMICH_REDIS_HOSTNAME}
+      - REDIS_PORT=${IMMICH_REDIS_PORT}
+      - IMMICH_URL=${IMMICH_URL}
+      - IMMICH_EXTERNAL_DOMAIN=https://${TAILSCALE_HOSTNAME}:2283/photos
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - immich-server
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      
+      # --- 1. THE MAIN IMMICH SERVICE (Port 3000) ---
+      # This handles traffic that actually arrives on port 3000
+      - traefik.http.routers.immich-powertools-secure.rule=Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)
+      - traefik.http.routers.immich-powertools-secure.entrypoints=immich-power-tools-https
+      - traefik.http.routers.immich-powertools-secure.tls=true
+      - traefik.http.routers.immich-powertools-secure.service=immich-powertools-service
+      
+      # Service definition (points to internal container port 3000)
+      - traefik.http.services.immich-powertools-service.loadbalancer.server.port=3000
+
+      # --- 2. THE REDIRECT LOGIC (Port 443 -> 3000) ---
+      # A. Middleware: Regex to swap the port
+      # Catches "https://domain/immich" and redirects to "https://domain:3000"
+      # Note: We use '$$1' to escape the $ sign in docker-compose
+      - "traefik.http.middlewares.redirect-to-immich-PT-port.redirectregex.regex=^https?://([^/:]+)(:[0-9]+)?/immich/PowerTools"
+      - "traefik.http.middlewares.redirect-to-immich-PT-port.redirectregex.replacement=https://$$1:2284"
+      
+      # B. Router: Listens on standard HTTPS (443) for the path /immich
+      - "traefik.http.routers.immich-PT-redirector.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/immich/PowerTools`)"
+      - "traefik.http.routers.immich-PT-redirector.entrypoints=https"
+      - "traefik.http.routers.immich-PT-redirector.tls=true"
+      - "traefik.http.routers.immich-PT-redirector.middlewares=redirect-to-immich-PT-port"
+      # 'noop@internal' means "don't send this traffic to a container, just run the middleware"
+      - "traefik.http.routers.immich-PT-redirector.service=noop@internal"
+
+    
+      - homepage.group=Home Server
+      - homepage.name=Immich PowerTools
+      - homepage.href=/immich/PowerTools
+      - homepage.icon=immich-power-tools.png
+
+# --- StirlingPDF
+  # A powerful, self-hosted data logger for your Tesla.
+  stirling-pdf:
+    image: stirlingtools/stirling-pdf:latest
+    container_name: stirling-pdf
+    volumes:
+      - ./StirlingPDF/stirling-data/tessdata:/usr/share/tessdata   # OCR language files
+      - ./StirlingPDF/stirling-data/configs:/configs               # Settings & database
+      - ./StirlingPDF/stirling-data/logs:/logs                     # Application logs
+      - ./StirlingPDF/stirling-data/pipeline:/pipeline             # Automation configs
+    environment:
+      - SECURITY_ENABLELOGIN=false    # Set true to enable user authentication
+      - LANGS=en_GB                   # Interface language
+      - SYSTEM_ROOTURIPATH=/pdf       # Base URL that StirlingPDF "lives" on (will only work on `/pdf`)
+      - SYSTEM_ROOTURI=/pdf           # Base URL that StirlingPDF "lives" on (will only work on `/pdf`)
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+
+      # 1. THE ROUTER RULE
+      - traefik.http.routers.stirlingpdf.rule=(Host(`${HOSTNAME}`) || Host(`${TAILSCALE_HOSTNAME}`)) && PathPrefix(`/pdf`)
+      - traefik.http.routers.stirlingpdf.tls=true
+      - traefik.http.routers.stirlingpdf.entrypoints=https
+            
+      # Service Config
+      - traefik.http.services.stirlingpdf.loadbalancer.server.port=8080
+
+      # Homepage config
+      - homepage.group=Home Server
+      - homepage.name=StirlingPDF
+      - homepage.href=/pdf
+      - homepage.icon=stirling-pdf.png
 
 volumes:
   # ... (your existing volumes for sonarr/radarr etc) ...

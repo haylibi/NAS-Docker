@@ -48,11 +48,3 @@
         widget:
             type: fritzbox
             url: http://fritz.box/
-    - StirlingPDF:
-        icon: stirlingpdf.png
-        href: ${STIRLING_PDF_URL}
-        description: StirlingPDF
-    - Immich Tools:
-        icon: immich.png
-        href: ${IMMICH_POWERTOOLS_URL}
-        description: PowerTools for Immich

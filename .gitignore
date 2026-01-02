@@ -42,3 +42,4 @@ custom-docker/jellyfin-webhooks/data/settings.json
 custom-docker/jellyfin-webhooks/data/app.log
 **.bak
 custom-docker/jellyfin-webhooks/data/*
+StirlingPDF/*
